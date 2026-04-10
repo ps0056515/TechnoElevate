@@ -1,0 +1,57 @@
+import React, { useEffect, useState } from 'react';
+
+const fmt = (v, unit) => {
+  if (unit === 'USD') return '$' + (v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v);
+  if (unit === '%') return v + '%';
+  if (unit === 'days') return v + 'd';
+  return v;
+};
+
+export default function HealthMetrics() {
+  const [metrics, setMetrics] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/health').then(r => r.json()).then(d => { setMetrics(d); setLoading(false); });
+  }, []);
+
+  const key = (k) => metrics.find(m => m.metric_key === k);
+
+  if (loading) return (
+    <div className="card" style={{ display: 'flex', gap: 12 }}>
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="shimmer" style={{ flex: 1, height: 72, borderRadius: 8 }} />
+      ))}
+    </div>
+  );
+
+  const cards = [
+    { key: 'win_rate', label: 'Win Rate', color: 'var(--green)', trend: '↑', trendColor: 'var(--green)' },
+    { key: 'avg_time_to_submit', label: 'Avg Time-to-Submit', color: 'var(--accent-blue)', trend: '↓', trendColor: 'var(--green)' },
+    { key: 'revenue_at_risk', label: 'Revenue at Risk', color: 'var(--red)', trend: '↑', trendColor: 'var(--red)' },
+    { key: 'bench_cost', label: 'Bench Cost / Mo', color: 'var(--amber)', trend: '↑', trendColor: 'var(--amber)' },
+    { key: 'deployed_talent', label: 'Deployed Talent', color: 'var(--accent-cyan)', trend: '↑', trendColor: 'var(--green)' },
+    { key: 'active_reqs', label: 'Active Requirements', color: 'var(--purple)', trend: '↑', trendColor: 'var(--green)' },
+    { key: 'active_contracts', label: 'Active Contracts', color: 'var(--accent-blue)', trend: '—', trendColor: 'var(--text-muted)' },
+    { key: 'avg_utilization', label: 'Avg Utilization', color: 'var(--green)', trend: '↓', trendColor: 'var(--amber)' },
+  ];
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+      {cards.map(c => {
+        const m = key(c.key);
+        if (!m) return null;
+        return (
+          <div key={c.key} className="card" style={{ padding: '14px 16px', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, background: c.color, borderRadius: '10px 0 0 10px' }} />
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: 0.5, marginBottom: 6 }}>{m.metric_label.toUpperCase()}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 24, fontWeight: 700, color: c.color }}>{fmt(m.metric_value, m.metric_unit)}</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: c.trendColor }}>{c.trend}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

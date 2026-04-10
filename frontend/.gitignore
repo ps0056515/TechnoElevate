@@ -1,0 +1,21 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# env (keep secrets out of git)
+.env*.local
+.env
+
+# SQLite (local database file)
+#prisma/*.db
+#prisma/*.db-journal
+
+# CMS uploads (keep folder via .gitkeep)
+public/uploads/cms/*
+!public/uploads/cms/.gitkeep
+
+# debug
+npm-debug.log*
