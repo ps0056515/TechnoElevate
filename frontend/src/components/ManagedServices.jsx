@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../api.js';
 
 const stageConfig = {
   green: { label: 'On Track', color: 'var(--green)', bg: 'var(--green-dim)', dot: 'dot-green' },
@@ -27,12 +28,12 @@ export default function ManagedServices({ compact }) {
   const [filter, setFilter] = useState('all');
 
   const load = () => {
-    fetch('/api/projects').then(r => r.json()).then(d => { setProjects(d); setLoading(false); });
+    apiFetch('/api/projects').then(r => r.json()).then(d => { setProjects(d); setLoading(false); });
   };
   useEffect(load, []);
 
   const resolve = async (id) => {
-    await fetch(`/api/projects/${id}/resolve`, { method: 'PATCH' });
+    await apiFetch(`/api/projects/${id}/resolve`, { method: 'PATCH' });
     load();
   };
 

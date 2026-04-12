@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Field, Input, Select, Row, Toggle, Textarea } from './admin/FormField.jsx';
 import ThemePicker from './ThemePicker.jsx';
+import { apiFetch } from '../api.js';
 
 const SETTING_TABS = [
   { key: 'profile',       label: '👤 Profile',         desc: 'Your personal details and preferences' },
@@ -54,11 +55,11 @@ export default function SettingsPage({ user, onLogout, onUpdateUser }) {
 
   // Profile form
   const [profile, setProfile] = useState({
-    name: user?.name || 'Sarah K.',
-    email: user?.email || 'sarah@techno.com',
-    role: user?.role || 'Delivery Lead',
-    phone: '+91 98765 43210',
-    bio: 'Delivery Lead with 8+ years in IT staffing and professional services.',
+    name: user?.name || '',
+    email: user?.email || '',
+    role: user?.role || '',
+    phone: '',
+    bio: '',
   });
 
   // Platform settings
@@ -82,19 +83,90 @@ export default function SettingsPage({ user, onLogout, onUpdateUser }) {
   const [security, setSecurity] = useState({ currentPwd: '', newPwd: '', confirmPwd: '' });
   const [pwdError, setPwdError] = useState('');
 
-  const save = (key) => {
-    if (key === 'profile') onUpdateUser?.({ ...user, name: profile.name, role: profile.role });
-    setSaved(s => ({ ...s, [key]: true }));
-    setTimeout(() => setSaved(s => ({ ...s, [key]: false })), 2500);
+  // Load persisted settings on mount
+  useEffect(() => {
+    apiFetch('/api/auth/settings')
+      .then(r => r?.json())
+      .then(s => {
+        if (!s) return;
+        setProfile(p => ({ ...p, phone: s.phone || '', bio: s.bio || '' }));
+        setPlatform({
+          timezone: s.timezone || 'IST (UTC+5:30)',
+          dateFormat: s.date_format || 'DD/MM/YYYY',
+          currency: s.currency || 'USD ($)',
+          companyName: s.company_name || 'TechnoElevate',
+          staleThresholdDays: s.stale_threshold_days ?? 3,
+          benchAlertDays: s.bench_alert_days ?? 7,
+        });
+        setNotifs({
+          stalledReqs: s.notif_stalled_reqs ?? true,
+          expiringSOW: s.notif_expiring_sow ?? true,
+          benchIdle: s.notif_bench_idle ?? true,
+          invoiceOverdue: s.notif_invoice_overdue ?? true,
+          emailAlerts: s.notif_email_alerts ?? true,
+          pushAlerts: s.notif_push_alerts ?? true,
+          weeklyDigest: s.notif_weekly_digest ?? true,
+          dailyStandup: s.notif_daily_standup ?? false,
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  const persistSettings = async (extra = {}) => {
+    await apiFetch('/api/auth/settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        phone: profile.phone, bio: profile.bio,
+        timezone: platform.timezone, date_format: platform.dateFormat,
+        currency: platform.currency, company_name: platform.companyName,
+        stale_threshold_days: platform.staleThresholdDays,
+        bench_alert_days: platform.benchAlertDays,
+        notif_stalled_reqs: notifs.stalledReqs, notif_expiring_sow: notifs.expiringSOW,
+        notif_bench_idle: notifs.benchIdle, notif_invoice_overdue: notifs.invoiceOverdue,
+        notif_email_alerts: notifs.emailAlerts, notif_push_alerts: notifs.pushAlerts,
+        notif_weekly_digest: notifs.weeklyDigest, notif_daily_standup: notifs.dailyStandup,
+        ...extra,
+      }),
+    });
   };
 
-  const savePassword = () => {
+  const save = async (key) => {
+    try {
+      if (key === 'profile') {
+        await apiFetch('/api/auth/profile', {
+          method: 'PUT',
+          body: JSON.stringify({ name: profile.name, role: profile.role }),
+        });
+        await persistSettings({ phone: profile.phone, bio: profile.bio });
+        onUpdateUser?.({ ...user, name: profile.name, role: profile.role });
+      } else {
+        await persistSettings();
+      }
+      setSaved(s => ({ ...s, [key]: true }));
+      setTimeout(() => setSaved(s => ({ ...s, [key]: false })), 2500);
+    } catch {
+      alert('Save failed — please try again');
+    }
+  };
+
+  const savePassword = async () => {
     if (!security.currentPwd) return setPwdError('Enter your current password');
     if (security.newPwd.length < 6) return setPwdError('New password must be at least 6 characters');
     if (security.newPwd !== security.confirmPwd) return setPwdError('Passwords do not match');
     setPwdError('');
-    setSecurity({ currentPwd: '', newPwd: '', confirmPwd: '' });
-    save('security');
+    try {
+      const res = await apiFetch('/api/auth/password', {
+        method: 'PUT',
+        body: JSON.stringify({ current_password: security.currentPwd, new_password: security.newPwd }),
+      });
+      const data = await res.json();
+      if (!res.ok) return setPwdError(data.error || 'Failed to change password');
+      setSecurity({ currentPwd: '', newPwd: '', confirmPwd: '' });
+      setSaved(s => ({ ...s, security: true }));
+      setTimeout(() => setSaved(s => ({ ...s, security: false })), 2500);
+    } catch {
+      setPwdError('Could not reach server');
+    }
   };
 
   const addMember = () => {

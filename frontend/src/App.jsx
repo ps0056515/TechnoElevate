@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getToken, clearToken, apiFetch } from './api.js';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import ThemePicker from './components/ThemePicker.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import DashboardOverview from './components/DashboardOverview.jsx';
@@ -28,10 +30,27 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [activeNav, setActiveNav] = useState('Dashboard');
   const [activeTab, setActiveTab] = useState('Overview');
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    const token = getToken();
+    if (!token) { setCheckingSession(false); return; }
+    apiFetch('/api/auth/me')
+      .then(r => r?.json())
+      .then(data => { if (data?.id) setUser(data); else clearToken(); })
+      .catch(() => clearToken())
+      .finally(() => setCheckingSession(false));
+  }, []);
 
   const handleLogin = (u) => setUser(u);
-  const handleLogout = () => { setUser(null); setActiveNav('Dashboard'); };
-  const handleUpdateUser = (updated) => setUser(updated);
+  const handleLogout = () => { clearToken(); setUser(null); setActiveNav('Dashboard'); };
+  const handleUpdateUser = (updated) => setUser(prev => ({ ...prev, ...updated }));
+
+  if (checkingSession) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0c0e18', color: '#555a8a', fontSize: 14 }}>
+      Loading…
+    </div>
+  );
 
   if (!user) return <LoginPage onLogin={handleLogin} />;
 
@@ -116,7 +135,9 @@ export default function App() {
 
         {/* Main content */}
         <div style={{ padding: '20px 24px', flex: 1 }}>
-          {renderContent()}
+          <ErrorBoundary key={activeNav}>
+            {renderContent()}
+          </ErrorBoundary>
         </div>
       </div>
     </div>

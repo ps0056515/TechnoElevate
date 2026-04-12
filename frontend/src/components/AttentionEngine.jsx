@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../api.js';
 
 const priorityConfig = {
   HIGH: { dot: 'dot-red', badge: 'badge-red', label: 'HIGH', btnClass: 'btn-red' },
@@ -12,12 +13,12 @@ export default function AttentionEngine() {
   const [collapsed, setCollapsed] = useState(false);
 
   const load = () => {
-    fetch('/api/attention').then(r => r.json()).then(d => { setIssues(d); setLoading(false); });
+    apiFetch('/api/attention').then(r => r.json()).then(d => { setIssues(d); setLoading(false); });
   };
   useEffect(load, []);
 
   const resolve = async (id) => {
-    await fetch(`/api/attention/${id}/resolve`, { method: 'PATCH' });
+    await apiFetch(`/api/attention/${id}/resolve`, { method: 'PATCH' });
     setIssues(prev => prev.filter(i => i.id !== id));
   };
 

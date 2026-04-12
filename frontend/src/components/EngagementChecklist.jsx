@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../api.js';
 
 const STAGE_ICONS = ['📄', '🔍', '🤝', '🔑', '📞', '📊', '✅'];
 
@@ -8,7 +9,7 @@ export default function EngagementChecklist() {
   const [selected, setSelected] = useState(null);
 
   const load = () => {
-    fetch('/api/engagements').then(r => r.json()).then(d => {
+    apiFetch('/api/engagements').then(r => r.json()).then(d => {
       setData(d);
       if (!selected && d.engagements?.length) setSelected(d.engagements[0].id);
       setLoading(false);
@@ -17,7 +18,7 @@ export default function EngagementChecklist() {
   useEffect(load, []);
 
   const complete = async (itemId) => {
-    await fetch(`/api/engagements/checklist/${itemId}/complete`, { method: 'PATCH' });
+    await apiFetch(`/api/engagements/checklist/${itemId}/complete`, { method: 'PATCH' });
     load();
   };
 

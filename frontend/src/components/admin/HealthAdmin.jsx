@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../../api.js';
 
 const unitLabel = { '%': '%', 'USD': '$', 'days': 'd', 'count': '' };
 const trendColors = { up: 'var(--green)', down: 'var(--red)', flat: 'var(--text-muted)' };
@@ -12,7 +13,7 @@ export default function HealthAdmin() {
 
   const load = () => {
     setLoading(true);
-    fetch('/api/health').then(r => r.json()).then(d => { setRows(d); setLoading(false); });
+    apiFetch('/api/health').then(r => r.json()).then(d => { setRows(d); setLoading(false); });
   };
   useEffect(load, []);
 
@@ -20,7 +21,7 @@ export default function HealthAdmin() {
     const val = editing[row.id];
     if (val === undefined || val === '') return;
     setSaving(s => ({ ...s, [row.id]: true }));
-    await fetch(`/api/health/${row.id}`, {
+    await apiFetch(`/api/health/${row.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ metric_value: val }),

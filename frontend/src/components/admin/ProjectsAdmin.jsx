@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import AdminModal from './AdminModal.jsx';
 import AdminTable from './AdminTable.jsx';
 import { Field, Input, Select, Textarea, Row } from './FormField.jsx';
+import { apiFetch } from '../../api.js';
 
-const EMPTY = { name: '', client: '', stage: 'green', blocking_issue: '', team_size: 0, start_date: '', end_date: '', utilization_pct: 0 };
+const EMPTY = { name: '', client: '', stage: 'green', blocking_issue: '', team_size: 0, start_date: '', end_date: '', utilization_pct: 0, industry: '', sector: '', geography: '' };
+
+const INDUSTRIES = ['FinTech', 'HealthTech', 'Retail', 'Manufacturing', 'Technology', 'BFSI', 'Telecom', 'Other'];
 const STAGES = [
   { value: 'green', label: 'On Track' },
   { value: 'at_risk', label: 'At Risk' },
@@ -22,7 +25,7 @@ export default function ProjectsAdmin() {
 
   const load = () => {
     setLoading(true);
-    fetch('/api/admin/projects').then(r => r.json()).then(d => { setRows(d); setLoading(false); });
+    apiFetch('/api/admin/projects').then(r => r.json()).then(d => { setRows(d); setLoading(false); });
   };
   useEffect(load, []);
 
@@ -41,7 +44,7 @@ export default function ProjectsAdmin() {
     if (!form.name.trim()) return alert('Project name is required');
     setSaving(true);
     const url = modal === 'edit' ? `/api/admin/projects/${form.id}` : '/api/admin/projects';
-    await fetch(url, {
+    await apiFetch(url, {
       method: modal === 'edit' ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
@@ -49,7 +52,7 @@ export default function ProjectsAdmin() {
     setSaving(false); setModal(null); load();
   };
 
-  const del = async (id) => { await fetch(`/api/admin/projects/${id}`, { method: 'DELETE' }); load(); };
+  const del = async (id) => { await apiFetch(`/api/admin/projects/${id}`, { method: 'DELETE' }); load(); };
 
   const columns = [
     { key: 'name', label: 'Project' },
@@ -61,6 +64,7 @@ export default function ProjectsAdmin() {
       render: v => <span style={{ color: v >= 85 ? 'var(--green)' : v >= 70 ? 'var(--amber)' : 'var(--red)', fontWeight: 600 }}>{v}%</span>
     },
     { key: 'blocking_issue', label: 'Blocking Issue', render: v => v ? <span style={{ color: 'var(--red)' }}>{v}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span> },
+    { key: 'industry', label: 'Industry', render: v => v ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: 'var(--accent-blue)', color: '#fff' }}>{v}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span> },
   ];
 
   return (
@@ -88,6 +92,13 @@ export default function ProjectsAdmin() {
           <Field label="Blocking Issue (leave blank if none)">
             <Textarea value={form.blocking_issue || ''} onChange={set('blocking_issue')} placeholder="Describe the blocking issue…" rows={2} />
           </Field>
+          <Row>
+            <Field label="Industry">
+              <Select value={form.industry || ''} onChange={set('industry')} options={[{ value: '', label: 'Select industry…' }, ...INDUSTRIES.map(i => ({ value: i, label: i }))]} />
+            </Field>
+            <Field label="Sector"><Input value={form.sector || ''} onChange={set('sector')} placeholder="e.g. Payments, EMR, E-Commerce" /></Field>
+          </Row>
+          <Field label="Geography"><Input value={form.geography || ''} onChange={set('geography')} placeholder="e.g. US West, APAC, India" /></Field>
         </AdminModal>
       )}
     </div>

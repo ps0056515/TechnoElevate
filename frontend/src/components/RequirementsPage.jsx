@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import AdminModal from './admin/AdminModal.jsx';
 import { Field, Input, Select, Row, Toggle } from './admin/FormField.jsx';
+import { apiFetch } from '../api.js';
+import ExportButton from './ExportButton.jsx';
+import SendReportModal from './SendReportModal.jsx';
 
 const EMPTY = { req_id: '', title: '', client: '', stage: 'intake', days_in_stage: 0, stalled: false, priority: 'MED', role_type: '' };
 const STAGES = ['intake', 'sourcing', 'submission', 'screening', 'interviewing', 'closure'];
@@ -21,10 +24,11 @@ export default function RequirementsPage() {
   const [viewMode, setViewMode] = useState('kanban');
   const [search, setSearch] = useState('');
   const [filterPriority, setFilterPriority] = useState('all');
+  const [showSend, setShowSend] = useState(false);
 
   const load = () => {
     setLoading(true);
-    fetch('/api/admin/requirements').then(r => r.json()).then(d => { setReqs(d); setLoading(false); });
+    apiFetch('/api/admin/requirements').then(r => r.json()).then(d => { setReqs(d); setLoading(false); });
   };
   useEffect(load, []);
 
@@ -36,7 +40,7 @@ export default function RequirementsPage() {
     if (!form.req_id.trim() || !form.title.trim()) return alert('Req ID and Title are required');
     setSaving(true);
     const url = modal === 'edit' ? `/api/admin/requirements/${form.id}` : '/api/admin/requirements';
-    await fetch(url, {
+    await apiFetch(url, {
       method: modal === 'edit' ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
@@ -46,14 +50,14 @@ export default function RequirementsPage() {
 
   const del = async (id) => {
     if (!confirm('Delete this requirement?')) return;
-    await fetch(`/api/admin/requirements/${id}`, { method: 'DELETE' });
+    await apiFetch(`/api/admin/requirements/${id}`, { method: 'DELETE' });
     load();
   };
 
   const advance = async (id, currentStage) => {
     const idx = STAGES.indexOf(currentStage);
     if (idx >= STAGES.length - 1) return;
-    await fetch(`/api/pipeline/${id}/stage`, {
+    await apiFetch(`/api/pipeline/${id}/stage`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stage: STAGES[idx + 1] }),
     });
@@ -80,6 +84,14 @@ export default function RequirementsPage() {
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0' }}>Manage and track all open requirements through the pipeline</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <ExportButton
+            data={{
+              title: 'Requirements Pipeline Report',
+              sections: [{ heading: 'Requirements', rows: reqs.map(r => ({ 'Req ID': r.req_id, Title: r.title, Client: r.client, Stage: r.stage, Priority: r.priority, 'Days in Stage': r.days_in_stage, 'Role Type': r.role_type, Stalled: r.stalled ? 'Yes' : 'No' })) }],
+            }}
+            filename="requirements-report"
+          />
+          <button className="btn btn-secondary" onClick={() => setShowSend(true)} style={{ fontSize: 13 }}>📧 Send</button>
           <button onClick={() => setViewMode(viewMode === 'kanban' ? 'list' : 'kanban')} className="btn btn-ghost">
             {viewMode === 'kanban' ? '☰ List View' : '⊞ Kanban View'}
           </button>
@@ -216,6 +228,14 @@ export default function RequirementsPage() {
             <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>No requirements match your filter.</div>
           )}
         </div>
+      )}
+
+      {showSend && (
+        <SendReportModal
+          reportType="Requirements Pipeline"
+          data={{ title: 'Requirements Pipeline Report', sections: [{ heading: 'Requirements', rows: reqs.map(r => ({ 'Req ID': r.req_id, Title: r.title, Client: r.client, Stage: r.stage, Priority: r.priority, 'Days in Stage': r.days_in_stage })) }] }}
+          onClose={() => setShowSend(false)}
+        />
       )}
 
       {modal && (

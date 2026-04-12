@@ -2,6 +2,7 @@ require('dotenv').config();
 const pool = require('./db');
 const fs = require('fs');
 const path = require('path');
+const bcrypt = require('bcryptjs');
 
 async function runSchema() {
   const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
@@ -13,7 +14,23 @@ async function seed() {
   await runSchema();
 
   // Clear existing data
-  await pool.query(`TRUNCATE attention_issues, bench_idle_weekly, requirements, projects, contracts, engagement_checklist_items, engagements, talent, health_metrics RESTART IDENTITY CASCADE`);
+  await pool.query(`TRUNCATE project_documents, case_studies, user_settings, users, attention_issues, bench_idle_weekly, requirements, projects, contracts, engagement_checklist_items, engagements, talent, health_metrics, leads RESTART IDENTITY CASCADE`);
+
+  // Users
+  const adminHash   = await bcrypt.hash('admin123', 10);
+  const opsHash     = await bcrypt.hash('ops123', 10);
+  await pool.query(`
+    INSERT INTO users (name, email, password_hash, role, initials, color) VALUES
+    ('Sarah K.',    'sarah@techno.com', $1, 'Delivery Lead',  'SK', 'linear-gradient(135deg, #4f7cff, #a55eea)'),
+    ('Admin User',  'admin@techno.com', $1, 'Administrator',  'AU', 'linear-gradient(135deg, #ff4757, #a55eea)'),
+    ('Ops Manager', 'ops@techno.com',   $2, 'Operations',     'OM', 'linear-gradient(135deg, #2ed573, #4f7cff)')
+  `, [adminHash, opsHash]);
+
+  // Default settings for each user
+  const users = await pool.query('SELECT id FROM users');
+  for (const u of users.rows) {
+    await pool.query('INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [u.id]);
+  }
 
   // Attention Issues
   await pool.query(`
@@ -124,19 +141,19 @@ async function seed() {
     ('Req-397', 'Salesforce Admin', 'SAP', 'sourcing', 1, false, 'LOW', 'CRM')
   `);
 
-  // Projects
+  // Projects (with industry, sector, geography)
   await pool.query(`
-    INSERT INTO projects (name, client, stage, blocking_issue, team_size, start_date, end_date, utilization_pct) VALUES
-    ('Project Alpha', 'Tesla', 'green', NULL, 8, '2026-01-15', '2026-07-15', 94),
-    ('Project Beta', 'Nvidia', 'green', NULL, 6, '2026-02-01', '2026-08-01', 88),
-    ('Project Delta', 'Microsoft', 'blocked', 'Integration API failing — vendor delay', 5, '2026-01-20', '2026-06-20', 62),
-    ('Project Orion', 'Google', 'at_risk', 'Resource gap: need 2 more Java Devs', 4, '2026-03-01', '2026-09-01', 68),
-    ('Project Phoenix', 'Amazon', 'green', NULL, 10, '2025-10-01', '2026-04-30', 91),
-    ('Project Sigma', 'Apple', 'at_risk', 'Scope creep — change request pending', 7, '2026-02-15', '2026-10-15', 74),
-    ('Project Zeta', 'Meta', 'green', NULL, 5, '2026-03-10', '2026-09-10', 87),
-    ('Project Titan', 'Stripe', 'blocked', 'Security audit hold — compliance issue', 3, '2026-01-05', '2026-05-05', 55),
-    ('Project Nova', 'Oracle', 'completed', NULL, 6, '2025-06-01', '2026-03-31', 100),
-    ('Project Pulse', 'IBM', 'green', NULL, 9, '2026-04-01', '2026-12-31', 82)
+    INSERT INTO projects (name, client, stage, blocking_issue, team_size, start_date, end_date, utilization_pct, industry, sector, geography) VALUES
+    ('Project Alpha', 'Tesla', 'green', NULL, 8, '2026-01-15', '2026-07-15', 94, 'Manufacturing', 'Electric Vehicles', 'US West'),
+    ('Project Beta', 'Nvidia', 'green', NULL, 6, '2026-02-01', '2026-08-01', 88, 'Technology', 'Semiconductors', 'US West'),
+    ('Project Delta', 'Microsoft', 'blocked', 'Integration API failing — vendor delay', 5, '2026-01-20', '2026-06-20', 62, 'Technology', 'Cloud & SaaS', 'US West'),
+    ('Project Orion', 'Google', 'at_risk', 'Resource gap: need 2 more Java Devs', 4, '2026-03-01', '2026-09-01', 68, 'Technology', 'AI & Search', 'US West'),
+    ('Project Phoenix', 'Amazon', 'green', NULL, 10, '2025-10-01', '2026-04-30', 91, 'Retail', 'E-Commerce & Logistics', 'US East'),
+    ('Project Sigma', 'Apple', 'at_risk', 'Scope creep — change request pending', 7, '2026-02-15', '2026-10-15', 74, 'Technology', 'Consumer Electronics', 'US West'),
+    ('Project Zeta', 'Meta', 'green', NULL, 5, '2026-03-10', '2026-09-10', 87, 'Technology', 'Social Media', 'US West'),
+    ('Project Titan', 'Stripe', 'blocked', 'Security audit hold — compliance issue', 3, '2026-01-05', '2026-05-05', 55, 'FinTech', 'Payments', 'US West'),
+    ('Project Nova', 'Oracle', 'completed', NULL, 6, '2025-06-01', '2026-03-31', 100, 'Technology', 'Enterprise Software', 'US East'),
+    ('Project Pulse', 'IBM', 'green', NULL, 9, '2026-04-01', '2026-12-31', 82, 'Technology', 'Consulting & Services', 'US East')
   `);
 
   // Contracts
@@ -205,6 +222,60 @@ async function seed() {
     ('deployed_talent', 'Deployed Talent', 142, 'count', 'up'),
     ('active_contracts', 'Active Contracts', 8, 'count', 'flat'),
     ('avg_utilization', 'Avg Utilization', 80.1, '%', 'down')
+  `);
+
+  // Leads
+  await pool.query(`
+    INSERT INTO leads (company_name, contact_name, contact_email, contact_phone, source, status, estimated_value, notes, follow_up_date) VALUES
+    ('SpaceX', 'Elon M.', 'elon@spacex.com', '+1 310 555 0101', 'Referral', 'qualified', 350000, 'Looking for 5 backend devs', '2026-04-15'),
+    ('OpenAI', 'Sam A.', 'sam@openai.com', '+1 415 555 0202', 'LinkedIn', 'proposal_sent', 580000, 'ML engineers needed', '2026-04-12'),
+    ('Stripe', 'Patrick C.', 'pc@stripe.com', '+1 415 555 0303', 'Inbound', 'contacted', 220000, 'React + Node.js team', '2026-04-20'),
+    ('Figma', 'Dylan F.', 'dylan@figma.com', '+1 415 555 0404', 'Event', 'new', 140000, 'UX designers and FE devs', '2026-04-18'),
+    ('Databricks', 'Ali G.', 'ali@databricks.com', '+1 650 555 0505', 'Partner', 'negotiation', 460000, 'Data engineers + architects', '2026-04-11'),
+    ('Vercel', 'Guillermo R.', 'gr@vercel.com', '+1 415 555 0606', 'Cold Outreach', 'won', 180000, 'SOW signed', NULL),
+    ('Cloudflare', 'Matthew P.', 'mp@cloudflare.com', '+1 650 555 0707', 'Referral', 'contacted', 290000, 'Security engineers needed', '2026-04-25'),
+    ('Notion', 'Ivan Z.', 'ivan@notion.so', '+1 415 555 0808', 'LinkedIn', 'new', 95000, 'Product-focused FE team', '2026-04-30'),
+    ('Rippling', 'Parker C.', 'pc@rippling.com', '+1 415 555 0909', 'Inbound', 'qualified', 415000, 'Full-stack platform engineers', '2026-04-22'),
+    ('Brex', 'Henrique D.', 'hd@brex.com', '+1 415 555 1010', 'Cold Outreach', 'lost', 260000, 'Went with competitor', NULL)
+  `);
+
+  // Case Studies
+  await pool.query(`
+    INSERT INTO case_studies (project_id, title, client, industry, sector, challenge, solution, results, metrics, tags, published, ai_generated) VALUES
+    (1, 'Accelerating EV Manufacturing with Cloud-Native Data Pipelines', 'Tesla', 'Manufacturing', 'Electric Vehicles',
+     'Tesla needed to consolidate sensor data from 3 manufacturing plants into a real-time analytics platform to reduce production defect rates and improve line throughput.',
+     'TechnoElevate deployed a team of 8 engineers — including data engineers, cloud architects, and React developers — to build a cloud-native pipeline on AWS using Kafka, Spark Streaming, and a React-based operations dashboard.',
+     'The platform went live in 18 weeks, reducing defect detection time from 4 hours to under 12 minutes. Production throughput improved by 23% in Q1 2026.',
+     '{"defect_detection_improvement": "95%", "throughput_gain": "23%", "time_to_live": "18 weeks", "team_size": "8 engineers", "cost_saved": "$420K annually"}',
+     ARRAY['AWS', 'Kafka', 'Spark', 'React', 'Data Engineering'], true, false),
+
+    (5, 'E-Commerce Fulfillment Optimisation for Amazon Logistics', 'Amazon', 'Retail', 'E-Commerce & Logistics',
+     'Amazon''s logistics team required a scalable order routing engine capable of processing 2M+ daily transactions with sub-100ms latency to support Prime Day peak loads.',
+     'TechnoElevate provided a 10-member cross-functional team to redesign the routing service using Go microservices, AWS Lambda, and DynamoDB, with a Cypress-tested frontend dashboard for operations visibility.',
+     'The new routing engine handled 3.4M transactions on Prime Day 2026 with 99.98% uptime and average latency of 67ms — well within SLA targets.',
+     '{"peak_tps": "39K TPS", "latency": "67ms avg", "uptime": "99.98%", "prime_day_transactions": "3.4M", "SLA_breaches": "0"}',
+     ARRAY['Go', 'AWS Lambda', 'DynamoDB', 'Microservices', 'Cypress'], true, false),
+
+    (8, 'Payments Compliance & Security Modernisation for Stripe', 'Stripe', 'FinTech', 'Payments',
+     'Following a PCI-DSS audit, Stripe''s internal platform team identified critical security gaps in their token vaulting service. They needed a specialist team to remediate findings and modernise the service within a tight 16-week window.',
+     'TechnoElevate embedded 3 security engineers and 2 backend developers into Stripe''s platform team. The engagement covered threat modelling, encryption key rotation, zero-trust network policy implementation, and comprehensive pen-testing.',
+     'All 14 critical and high-severity audit findings were resolved within 12 weeks, 4 weeks ahead of schedule. The team achieved PCI-DSS Level 1 compliance recertification.',
+     '{"audit_findings_resolved": "14/14", "weeks_ahead_of_schedule": "4", "compliance_achieved": "PCI-DSS Level 1", "vulnerabilities_patched": "47"}',
+     ARRAY['Security', 'PCI-DSS', 'Penetration Testing', 'Zero Trust', 'Encryption'], true, false),
+
+    (9, 'Enterprise ERP Modernisation for Oracle Financial Services', 'Oracle', 'Technology', 'Enterprise Software',
+     'Oracle''s financial services division was operating a legacy ERP system built on 15-year-old Java monolith architecture. The system caused $2.1M in annual maintenance costs and had a 4-hour daily maintenance window.',
+     'TechnoElevate led the full modernisation — decomposing the monolith into 12 Spring Boot microservices, migrating data to PostgreSQL, and building a new Angular-based self-service portal for 4,000 internal users.',
+     'The modernised platform eliminated the daily maintenance window, reduced infra costs by 61%, and improved transaction processing speed by 8x. The project was delivered on time and 7% under budget.',
+     '{"maintenance_cost_reduction": "61%", "transaction_speed_improvement": "8x", "maintenance_window_eliminated": "4h/day", "users_migrated": "4000", "delivery": "On time, 7% under budget"}',
+     ARRAY['Java', 'Spring Boot', 'Microservices', 'PostgreSQL', 'Angular'], true, false),
+
+    (4, 'AI-Powered Search Infrastructure for Google Cloud', 'Google', 'Technology', 'AI & Search',
+     'Google''s Cloud team needed to integrate a vector search capability into their internal developer tools portal to improve documentation discovery across 40,000+ pages.',
+     'TechnoElevate deployed a 4-member AI/ML team to design and implement a vector embedding pipeline using Python, OpenAI embeddings, and Pinecone, with a React frontend for semantic search.',
+     'Developer documentation discovery time dropped by 74%. The search portal now handles 120K queries/day with p99 latency under 200ms. Internal NPS for the tool went from 34 to 81.',
+     '{"search_latency_p99": "< 200ms", "daily_queries": "120K", "discovery_time_reduction": "74%", "nps_improvement": "34 → 81"}',
+     ARRAY['Python', 'OpenAI', 'Vector Search', 'Pinecone', 'React', 'AI/ML'], false, false)
   `);
 
   console.log('Seed complete.');

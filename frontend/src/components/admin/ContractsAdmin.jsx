@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import AdminModal from './AdminModal.jsx';
 import AdminTable from './AdminTable.jsx';
 import { Field, Input, Select, Row, Toggle } from './FormField.jsx';
+import { apiFetch } from '../../api.js';
 
 const EMPTY = { sow_id: '', client: '', start_date: '', end_date: '', value: '', status: 'active', invoice_overdue: false, invoice_amount: '', utilization_pct: '' };
 const STATUS_OPTS = [
@@ -22,7 +23,7 @@ export default function ContractsAdmin() {
 
   const load = () => {
     setLoading(true);
-    fetch('/api/admin/contracts').then(r => r.json()).then(d => { setRows(d); setLoading(false); });
+    apiFetch('/api/admin/contracts').then(r => r.json()).then(d => { setRows(d); setLoading(false); });
   };
   useEffect(load, []);
 
@@ -38,10 +39,10 @@ export default function ContractsAdmin() {
   };
 
   const save = async () => {
-    if (!form.sow_id.trim() || !form.client.trim()) return alert('SOW ID and Client are required');
+    if (!form.client.trim()) return alert('Client is required');
     setSaving(true);
     const url = modal === 'edit' ? `/api/admin/contracts/${form.id}` : '/api/admin/contracts';
-    await fetch(url, {
+    await apiFetch(url, {
       method: modal === 'edit' ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
@@ -49,7 +50,7 @@ export default function ContractsAdmin() {
     setSaving(false); setModal(null); load();
   };
 
-  const del = async (id) => { await fetch(`/api/admin/contracts/${id}`, { method: 'DELETE' }); load(); };
+  const del = async (id) => { await apiFetch(`/api/admin/contracts/${id}`, { method: 'DELETE' }); load(); };
 
   const columns = [
     { key: 'sow_id', label: 'SOW ID', render: v => <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{v}</span> },
@@ -73,10 +74,13 @@ export default function ContractsAdmin() {
 
       {modal && (
         <AdminModal title={modal === 'edit' ? 'Edit Contract' : 'Add Contract'} onClose={() => setModal(null)} onSave={save} saving={saving}>
-          <Row>
-            <Field label="SOW ID" required><Input value={form.sow_id} onChange={set('sow_id')} placeholder="e.g. SOW-Tesla-2026" /></Field>
-            <Field label="Client" required><Input value={form.client} onChange={set('client')} placeholder="e.g. Tesla" /></Field>
-          </Row>
+          {modal === 'edit' && (
+            <div style={{ marginBottom: 14, padding: '7px 12px', background: 'var(--bg-hover)', borderRadius: 6, border: '1px solid var(--border)' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.6 }}>SOW ID — </span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-blue)' }}>{form.sow_id}</span>
+            </div>
+          )}
+          <Field label="Client" required><Input value={form.client} onChange={set('client')} placeholder="e.g. Tesla" /></Field>
           <Row>
             <Field label="Start Date"><Input type="date" value={form.start_date} onChange={set('start_date')} /></Field>
             <Field label="End Date"><Input type="date" value={form.end_date} onChange={set('end_date')} /></Field>

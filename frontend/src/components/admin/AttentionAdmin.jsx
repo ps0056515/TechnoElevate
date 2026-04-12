@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import AdminModal from './AdminModal.jsx';
 import AdminTable from './AdminTable.jsx';
 import { Field, Input, Select, Textarea, Row, Toggle } from './FormField.jsx';
+import { apiFetch } from '../../api.js';
 
 const EMPTY = { priority: 'MED', entity_name: '', entity_type: 'requirement', entity_id: '', issue_description: '', action_label: '', days_stalled: 0, resolved: false };
 const PRIORITIES = ['HIGH', 'MED', 'LOW'];
@@ -17,7 +18,7 @@ export default function AttentionAdmin() {
 
   const load = () => {
     setLoading(true);
-    fetch('/api/admin/attention').then(r => r.json()).then(d => { setRows(d); setLoading(false); });
+    apiFetch('/api/admin/attention').then(r => r.json()).then(d => { setRows(d); setLoading(false); });
   };
   useEffect(load, []);
 
@@ -29,7 +30,7 @@ export default function AttentionAdmin() {
     if (!form.entity_name.trim() || !form.issue_description.trim()) return alert('Entity Name and Issue Description are required');
     setSaving(true);
     const url = modal === 'edit' ? `/api/admin/attention/${form.id}` : '/api/admin/attention';
-    await fetch(url, {
+    await apiFetch(url, {
       method: modal === 'edit' ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
@@ -37,7 +38,7 @@ export default function AttentionAdmin() {
     setSaving(false); setModal(null); load();
   };
 
-  const del = async (id) => { await fetch(`/api/admin/attention/${id}`, { method: 'DELETE' }); load(); };
+  const del = async (id) => { await apiFetch(`/api/admin/attention/${id}`, { method: 'DELETE' }); load(); };
 
   const columns = [
     { key: 'priority', label: 'Priority', render: v => <span style={{ color: priorityColors[v], fontWeight: 700 }}>{v}</span> },

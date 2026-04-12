@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../api.js';
 
 const statusConfig = {
   active: { label: 'Active', color: 'var(--green)', bg: 'var(--green-dim)' },
@@ -14,7 +15,7 @@ export default function ContractsPanel({ compact }) {
   const [filter, setFilter] = useState('all');
 
   useEffect(() => {
-    fetch('/api/contracts').then(r => r.json()).then(d => { setContracts(d); setLoading(false); });
+    apiFetch('/api/contracts').then(r => r.json()).then(d => { setContracts(d); setLoading(false); });
   }, []);
 
   const filtered = filter === 'all' ? contracts : contracts.filter(c => c.status === filter);

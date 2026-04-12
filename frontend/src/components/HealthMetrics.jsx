@@ -1,4 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../api.js';
+import ExportButton from './ExportButton.jsx';
+import SendReportModal from './SendReportModal.jsx';
 
 const fmt = (v, unit) => {
   if (unit === 'USD') return '$' + (v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v);
@@ -10,9 +13,10 @@ const fmt = (v, unit) => {
 export default function HealthMetrics() {
   const [metrics, setMetrics] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showSend, setShowSend] = useState(false);
 
   useEffect(() => {
-    fetch('/api/health').then(r => r.json()).then(d => { setMetrics(d); setLoading(false); });
+    apiFetch('/api/health').then(r => r.json()).then(d => { setMetrics(d); setLoading(false); });
   }, []);
 
   const key = (k) => metrics.find(m => m.metric_key === k);
@@ -36,7 +40,20 @@ export default function HealthMetrics() {
     { key: 'avg_utilization', label: 'Avg Utilization', color: 'var(--green)', trend: '↓', trendColor: 'var(--amber)' },
   ];
 
+  const reportData = {
+    title: 'Health Metrics Report',
+    sections: [{
+      heading: 'KPI Metrics',
+      rows: metrics.map(m => ({ Metric: m.metric_label, Value: fmt(m.metric_value, m.metric_unit), Unit: m.metric_unit, Trend: m.trend })),
+    }],
+  };
+
   return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 10 }}>
+        <ExportButton data={reportData} filename="health-metrics-report" />
+        <button className="btn btn-secondary" onClick={() => setShowSend(true)} style={{ fontSize: 12 }}>📧 Send</button>
+      </div>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
       {cards.map(c => {
         const m = key(c.key);
@@ -52,6 +69,10 @@ export default function HealthMetrics() {
           </div>
         );
       })}
+    </div>
+      {showSend && (
+        <SendReportModal reportType="Health Metrics" data={reportData} onClose={() => setShowSend(false)} />
+      )}
     </div>
   );
 }

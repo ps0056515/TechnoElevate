@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { apiFetch } from '../api.js';
 
 const STAGES = [
   { key: 'bench', label: 'Available on Bench', color: 'var(--text-secondary)', numColor: '#8b91c4' },
@@ -27,7 +28,7 @@ export default function TalentLifecycle() {
   const [selectedStage, setSelectedStage] = useState(null);
 
   useEffect(() => {
-    fetch('/api/talent/lifecycle').then(r => r.json()).then(d => { setData(d); setLoading(false); });
+    apiFetch('/api/talent/lifecycle').then(r => r.json()).then(d => { setData(d); setLoading(false); });
   }, []);
 
   const getCount = (key) => {

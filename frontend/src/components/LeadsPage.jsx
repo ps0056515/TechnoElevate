@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import AdminModal from './admin/AdminModal.jsx';
 import AdminTable from './admin/AdminTable.jsx';
 import { Field, Input, Select, Textarea, Row } from './admin/FormField.jsx';
+import { apiFetch } from '../api.js';
 
 const EMPTY = {
   company_name: '', contact_name: '', contact_email: '', contact_phone: '',
@@ -22,21 +23,27 @@ const statusColors = {
   proposal_sent: 'var(--amber)', negotiation: 'var(--accent-cyan)', won: 'var(--green)', lost: 'var(--red)',
 };
 
-const DEMO_LEADS = [
-  { id: 1, company_name: 'SpaceX', contact_name: 'Elon M.', contact_email: 'elon@spacex.com', source: 'Referral', status: 'qualified', estimated_value: 350000, follow_up_date: '2026-04-15', notes: 'Looking for 5 backend devs' },
-  { id: 2, company_name: 'OpenAI', contact_name: 'Sam A.', contact_email: 'sam@openai.com', source: 'LinkedIn', status: 'proposal_sent', estimated_value: 580000, follow_up_date: '2026-04-12', notes: 'ML engineers needed' },
-  { id: 3, company_name: 'Stripe', contact_name: 'Patrick C.', contact_email: 'pc@stripe.com', source: 'Inbound', status: 'contacted', estimated_value: 220000, follow_up_date: '2026-04-20', notes: 'React + Node.js team' },
-  { id: 4, company_name: 'Figma', contact_name: 'Dylan F.', contact_email: 'dylan@figma.com', source: 'Event', status: 'new', estimated_value: 140000, follow_up_date: '2026-04-18', notes: 'UX designers and FE devs' },
-  { id: 5, company_name: 'Databricks', contact_name: 'Ali G.', contact_email: 'ali@databricks.com', source: 'Partner', status: 'negotiation', estimated_value: 460000, follow_up_date: '2026-04-11', notes: 'Data engineers + architects' },
-  { id: 6, company_name: 'Vercel', contact_name: 'Guillermo R.', contact_email: 'gr@vercel.com', source: 'Cold Outreach', status: 'won', estimated_value: 180000, follow_up_date: null, notes: 'SOW signed' },
-];
-
 export default function LeadsPage() {
-  const [rows, setRows] = useState(DEMO_LEADS);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState('all');
+
+  const load = async () => {
+    try {
+      const res = await apiFetch('/api/leads');
+      const data = await res.json();
+      setRows(data);
+    } catch (err) {
+      console.error('Failed to load leads:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
 
   const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
   const openAdd = () => { setForm(EMPTY); setModal('add'); };
@@ -45,16 +52,37 @@ export default function LeadsPage() {
   const save = async () => {
     if (!form.company_name.trim()) return alert('Company name is required');
     setSaving(true);
-    await new Promise(r => setTimeout(r, 300));
-    if (modal === 'edit') {
-      setRows(prev => prev.map(r => r.id === form.id ? { ...form } : r));
-    } else {
-      setRows(prev => [{ ...form, id: Date.now() }, ...prev]);
+    try {
+      if (modal === 'edit') {
+        await apiFetch(`/api/leads/${form.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(form),
+        });
+      } else {
+        await apiFetch('/api/leads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(form),
+        });
+      }
+      await load();
+      setModal(null);
+    } catch (err) {
+      console.error('Save failed:', err);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false); setModal(null);
   };
 
-  const del = (id) => setRows(prev => prev.filter(r => r.id !== id));
+  const del = async (id) => {
+    try {
+      await apiFetch(`/api/leads/${id}`, { method: 'DELETE' });
+      setRows(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      console.error('Delete failed:', err);
+    }
+  };
 
   const filtered = filter === 'all' ? rows : rows.filter(r => r.status === filter);
 
@@ -126,7 +154,7 @@ export default function LeadsPage() {
 
       {/* Table */}
       <div className="card" style={{ padding: '16px 20px' }}>
-        <AdminTable columns={columns} rows={filtered} loading={false} onEdit={openEdit} onDelete={del} />
+        <AdminTable key={filter} columns={columns} rows={filtered} loading={loading} onEdit={openEdit} onDelete={del} pageSize={10} />
       </div>
 
       {modal && (

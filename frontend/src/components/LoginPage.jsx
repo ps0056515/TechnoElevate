@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
+import { setToken } from '../api.js';
 
 const DEMO_USERS = [
-  { email: 'sarah@techno.com', password: 'admin123', name: 'Sarah K.', role: 'Delivery Lead', initials: 'SK', color: 'linear-gradient(135deg, #4f7cff, #a55eea)' },
-  { email: 'admin@techno.com', password: 'admin123', name: 'Admin User', role: 'Administrator', initials: 'AU', color: 'linear-gradient(135deg, #ff4757, #a55eea)' },
-  { email: 'ops@techno.com',   password: 'ops123',   name: 'Ops Manager', role: 'Operations', initials: 'OM', color: 'linear-gradient(135deg, #2ed573, #4f7cff)' },
+  { email: 'sarah@techno.com', password: 'admin123', label: 'Sarah K.', role: 'Delivery Lead', initials: 'SK', color: 'linear-gradient(135deg, #4f7cff, #a55eea)' },
+  { email: 'admin@techno.com', password: 'admin123', label: 'Admin User', role: 'Administrator', initials: 'AU', color: 'linear-gradient(135deg, #ff4757, #a55eea)' },
+  { email: 'ops@techno.com',   password: 'ops123',   label: 'Ops Manager', role: 'Operations', initials: 'OM', color: 'linear-gradient(135deg, #2ed573, #4f7cff)' },
 ];
 
 export default function LoginPage({ onLogin }) {
@@ -24,12 +25,21 @@ export default function LoginPage({ onLogin }) {
     e.preventDefault();
     setError('');
     setLoading(true);
-    await new Promise(r => setTimeout(r, 600));
-    const user = DEMO_USERS.find(u => u.email === email.toLowerCase().trim() && u.password === password);
-    if (user) {
-      onLogin(user);
-    } else {
-      setError('Invalid email or password. Try sarah@techno.com / admin123');
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.toLowerCase().trim(), password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Invalid email or password');
+      } else {
+        setToken(data.token);
+        onLogin(data.user);
+      }
+    } catch {
+      setError('Could not reach the server. Is the backend running?');
     }
     setLoading(false);
   };
@@ -148,7 +158,7 @@ export default function LoginPage({ onLogin }) {
               >
                 <div style={{ width: 28, height: 28, borderRadius: '50%', background: u.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{u.initials}</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#e8eaf6' }}>{u.name}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#e8eaf6' }}>{u.label}</div>
                   <div style={{ fontSize: 10, color: '#555a8a' }}>{u.email}</div>
                 </div>
                 <span style={{ fontSize: 10, color: '#4f7cff' }}>Use →</span>

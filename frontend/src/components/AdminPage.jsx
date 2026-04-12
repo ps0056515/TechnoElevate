@@ -5,14 +5,16 @@ import ProjectsAdmin from './admin/ProjectsAdmin.jsx';
 import ContractsAdmin from './admin/ContractsAdmin.jsx';
 import AttentionAdmin from './admin/AttentionAdmin.jsx';
 import HealthAdmin from './admin/HealthAdmin.jsx';
+import CaseStudiesAdmin from './admin/CaseStudiesAdmin.jsx';
 
 const TABS = [
   { key: 'talent', label: '👤 Talent', desc: 'Manage all talent records — add, edit, update status' },
   { key: 'requirements', label: '📋 Requirements', desc: 'Add and track requirements through the pipeline' },
-  { key: 'projects', label: '▣ Projects', desc: 'Manage delivery projects and blocking issues' },
+  { key: 'projects', label: '▣ Projects', desc: 'Manage delivery projects, industry, sector, and geography' },
   { key: 'contracts', label: '📄 Contracts', desc: 'Maintain SOWs, expiry dates, and invoices' },
   { key: 'attention', label: '⚡ Attention Issues', desc: 'Create and manage priority attention alerts' },
   { key: 'health', label: '📊 KPI Metrics', desc: 'Update dashboard health metric values' },
+  { key: 'casestudies', label: '📘 Case Studies', desc: 'Create, edit, and publish case studies — review AI drafts here' },
 ];
 
 export default function AdminPage() {
@@ -77,6 +79,7 @@ export default function AdminPage() {
         {tab === 'contracts' && <ContractsAdmin />}
         {tab === 'attention' && <AttentionAdmin />}
         {tab === 'health' && <HealthAdmin />}
+        {tab === 'casestudies' && <CaseStudiesAdmin />}
       </div>
     </div>
   );

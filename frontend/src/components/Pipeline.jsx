@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../api.js';
 
 const STAGES = [
   { key: 'intake', label: 'Intake', color: 'var(--text-secondary)' },
@@ -16,7 +17,7 @@ export default function Pipeline() {
   const [loading, setLoading] = useState(true);
 
   const load = () => {
-    fetch('/api/pipeline').then(r => r.json()).then(d => { setReqs(d); setLoading(false); });
+    apiFetch('/api/pipeline').then(r => r.json()).then(d => { setReqs(d); setLoading(false); });
   };
   useEffect(load, []);
 
@@ -24,7 +25,7 @@ export default function Pipeline() {
     const idx = STAGE_KEYS.indexOf(currentStage);
     if (idx >= STAGE_KEYS.length - 1) return;
     const nextStage = STAGE_KEYS[idx + 1];
-    await fetch(`/api/pipeline/${id}/stage`, {
+    await apiFetch(`/api/pipeline/${id}/stage`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stage: nextStage }),
     });

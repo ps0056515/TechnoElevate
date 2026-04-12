@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import AdminModal from './AdminModal.jsx';
 import AdminTable from './AdminTable.jsx';
 import { Field, Input, Select, Row } from './FormField.jsx';
+import { apiFetch } from '../../api.js';
 
 const EMPTY = { name: '', role: '', status: 'bench', bench_start_date: '', idle_hours: 0, current_client: '', skills: '' };
 const STATUS_OPTS = ['bench', 'in_process', 'interviewing', 'offered', 'deployed'];
@@ -20,7 +21,7 @@ export default function TalentAdmin() {
 
   const load = () => {
     setLoading(true);
-    fetch('/api/admin/talent').then(r => r.json()).then(d => { setRows(d); setLoading(false); });
+    apiFetch('/api/admin/talent').then(r => r.json()).then(d => { setRows(d); setLoading(false); });
   };
   useEffect(load, []);
 
@@ -37,14 +38,14 @@ export default function TalentAdmin() {
     setSaving(true);
     const url = modal === 'edit' ? `/api/admin/talent/${form.id}` : '/api/admin/talent';
     const method = modal === 'edit' ? 'PUT' : 'POST';
-    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+    await apiFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
     setSaving(false);
     setModal(null);
     load();
   };
 
   const del = async (id) => {
-    await fetch(`/api/admin/talent/${id}`, { method: 'DELETE' });
+    await apiFetch(`/api/admin/talent/${id}`, { method: 'DELETE' });
     load();
   };
 
