@@ -13,11 +13,21 @@ const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:7000')
   .map(o => o.trim())
   .filter(Boolean);
 
+// Allowed frontend port — any host on this port is trusted (handles LAN IP access)
+const FRONTEND_PORT = process.env.FRONTEND_PORT || '7000';
+
 app.use(cors({
   origin: (origin, callback) => {
-    // Non-browser clients (curl, server-to-server) send no Origin
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    console.warn(`CORS: blocked origin "${origin}". Add it to FRONTEND_URL (comma-separated).`);
+    // Non-browser clients (curl, server-to-server) have no Origin header
+    if (!origin) return callback(null, true);
+    // Explicit whitelist match
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // Allow any origin whose port matches FRONTEND_PORT (covers LAN / remote IP access)
+    try {
+      const url = new URL(origin);
+      if (url.port === FRONTEND_PORT) return callback(null, true);
+    } catch (_) { /* invalid origin, fall through */ }
+    console.warn(`CORS: blocked origin "${origin}". Add it to FRONTEND_URL or set FRONTEND_PORT in .env`);
     return callback(null, false);
   },
   credentials: true,
