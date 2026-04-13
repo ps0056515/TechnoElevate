@@ -3,6 +3,7 @@ import AdminModal from './AdminModal.jsx';
 import AdminTable from './AdminTable.jsx';
 import { Field, Input, Select, Row, Toggle } from './FormField.jsx';
 import { apiFetch } from '../../api.js';
+import { marginColor } from '../../utils/marginUtils.js';
 
 const EMPTY = { sow_id: '', client: '', start_date: '', end_date: '', value: '', status: 'active', invoice_overdue: false, invoice_amount: '', utilization_pct: '' };
 const STATUS_OPTS = [
@@ -63,6 +64,8 @@ export default function ContractsAdmin() {
       render: (v, row) => v ? <span style={{ color: 'var(--red)', fontWeight: 600 }}>Overdue {fmtMoney(row.invoice_amount)}</span> : <span style={{ color: 'var(--text-muted)' }}>OK</span>
     },
     { key: 'utilization_pct', label: 'Util%', render: v => <span style={{ color: v >= 80 ? 'var(--green)' : 'var(--amber)' }}>{v}%</span> },
+    { key: 'linked_req_count', label: 'Reqs', render: v => <span style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>{v || 0}</span> },
+    { key: 'avg_margin', label: 'Avg Margin', render: v => v != null ? <span style={{ fontWeight: 700, color: marginColor(Math.round(parseFloat(v))) }}>{Math.round(parseFloat(v))}%</span> : <span style={{ color: 'var(--text-muted)' }}>—</span> },
   ];
 
   return (

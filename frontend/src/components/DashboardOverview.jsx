@@ -6,8 +6,16 @@ import ManagedServices from './ManagedServices.jsx';
 import ContractsPanel from './ContractsPanel.jsx';
 import EngagementChecklist from './EngagementChecklist.jsx';
 import HealthMetrics from './HealthMetrics.jsx';
+import FlowOverview from './FlowOverview.jsx';
+import ForecastPanel from './ForecastPanel.jsx';
 
-export default function DashboardOverview({ activeTab }) {
+import { apiFetch } from '../api.js';
+
+export default function DashboardOverview({ activeTab, onNavigate }) {
+  // Auto-generate alerts on mount
+  React.useEffect(() => {
+    apiFetch('/api/attention/auto-generate', { method: 'POST' }).catch(() => {});
+  }, []);
   if (activeTab === 'Talent') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -40,7 +48,9 @@ export default function DashboardOverview({ activeTab }) {
   // Overview
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <FlowOverview onNavigate={onNavigate} />
       <HealthMetrics />
+      <ForecastPanel />
       <AttentionEngine />
       <TalentLifecycle />
       <Pipeline />

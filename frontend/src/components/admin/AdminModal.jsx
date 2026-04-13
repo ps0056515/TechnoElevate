@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 
-export default function AdminModal({ title, onClose, onSave, children, saving }) {
+export default function AdminModal({ title, onClose, onSave, children, saving, saveLabel }) {
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -42,10 +42,12 @@ export default function AdminModal({ title, onClose, onSave, children, saving })
           padding: '14px 20px', borderTop: '1px solid var(--border)',
           display: 'flex', gap: 8, justifyContent: 'flex-end',
         }}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={onSave} disabled={saving} style={{ minWidth: 90 }}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
+          <button className="btn btn-ghost" onClick={onClose}>{onSave ? 'Cancel' : 'Close'}</button>
+          {onSave && (
+            <button className="btn btn-primary" onClick={onSave} disabled={saving} style={{ minWidth: 90 }}>
+              {saving ? 'Saving…' : (saveLabel || 'Save')}
+            </button>
+          )}
         </div>
       </div>
     </div>

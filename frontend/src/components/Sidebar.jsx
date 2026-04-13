@@ -7,6 +7,7 @@ const navItems = [
   { label: 'Projects', icon: '▣' },
   { label: 'Talent', icon: '◉' },
   { label: 'Contracts', icon: '📋', dot: true },
+  { label: 'Client 360', icon: '🔭' },
   { label: 'Admin', icon: '⚙', highlight: true },
   { label: 'Settings', icon: '🔧' },
 ];

@@ -3,11 +3,14 @@ import AdminModal from './admin/AdminModal.jsx';
 import AdminTable from './admin/AdminTable.jsx';
 import { Field, Input, Select, Textarea, Row } from './admin/FormField.jsx';
 import { apiFetch } from '../api.js';
+import { calcMargin, marginColor } from '../utils/marginUtils.js';
 
 const EMPTY = {
   company_name: '', contact_name: '', contact_email: '', contact_phone: '',
   source: '', status: 'new', estimated_value: '', notes: '', follow_up_date: '',
 };
+const REQ_EMPTY = { title: '', role_type: '', priority: 'HIGH', bill_rate: '', pay_rate: '' };
+
 const STATUS_OPTS = [
   { value: 'new', label: 'New' },
   { value: 'contacted', label: 'Contacted' },
@@ -18,24 +21,41 @@ const STATUS_OPTS = [
   { value: 'lost', label: 'Lost' },
 ];
 const SOURCE_OPTS = ['Referral', 'LinkedIn', 'Cold Outreach', 'Inbound', 'Event', 'Partner', 'Other'];
+const PRIORITIES = ['HIGH', 'MED', 'LOW'];
+const ROLE_TYPES = ['Frontend', 'Backend', 'Full Stack', 'DevOps', 'Cloud', 'Data', 'AI/ML', 'Mobile', 'QA', 'Security', 'PM', 'BA', 'Design', 'Architecture', 'Other'];
+
 const statusColors = {
   new: 'var(--text-muted)', contacted: 'var(--accent-blue)', qualified: 'var(--purple)',
   proposal_sent: 'var(--amber)', negotiation: 'var(--accent-cyan)', won: 'var(--green)', lost: 'var(--red)',
 };
 
+const stageColors = {
+  intake: 'var(--text-muted)', sourcing: 'var(--purple)', submission: 'var(--accent-blue)',
+  screening: 'var(--amber)', interviewing: 'var(--accent-cyan)', closure: 'var(--green)',
+};
+
 export default function LeadsPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null);
+  const [modal, setModal] = useState(null);       // 'add' | 'edit' | 'convert' | 'view_reqs'
   const [form, setForm] = useState(EMPTY);
+  const [reqForm, setReqForm] = useState(REQ_EMPTY);
+  const [activeLead, setActiveLead] = useState(null);
+  const [linkedReqs, setLinkedReqs] = useState([]);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [reqCounts, setReqCounts] = useState({});  // leadId → count
 
   const load = async () => {
     try {
       const res = await apiFetch('/api/leads');
       const data = await res.json();
       setRows(data);
+      // fetch req counts for all leads
+      const allReqs = await apiFetch('/api/admin/requirements').then(r => r.json());
+      const counts = {};
+      allReqs.forEach(r => { if (r.lead_id) counts[r.lead_id] = (counts[r.lead_id] || 0) + 1; });
+      setReqCounts(counts);
     } catch (err) {
       console.error('Failed to load leads:', err);
     } finally {
@@ -46,8 +66,26 @@ export default function LeadsPage() {
   useEffect(() => { load(); }, []);
 
   const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+  const setR = (k) => (v) => setReqForm(f => ({ ...f, [k]: v }));
+
   const openAdd = () => { setForm(EMPTY); setModal('add'); };
   const openEdit = (row) => { setForm({ ...row, follow_up_date: row.follow_up_date?.split('T')[0] || '' }); setModal('edit'); };
+
+  const openConvert = (lead) => {
+    setActiveLead(lead);
+    setReqForm({ ...REQ_EMPTY });
+    setModal('convert');
+  };
+
+  const openViewReqs = async (lead) => {
+    setActiveLead(lead);
+    setLinkedReqs([]);
+    setModal('view_reqs');
+    try {
+      const data = await apiFetch(`/api/leads/${lead.id}/requirements`).then(r => r.json());
+      setLinkedReqs(data);
+    } catch (err) { console.error(err); }
+  };
 
   const save = async () => {
     if (!form.company_name.trim()) return alert('Company name is required');
@@ -55,14 +93,12 @@ export default function LeadsPage() {
     try {
       if (modal === 'edit') {
         await apiFetch(`/api/leads/${form.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(form),
         });
       } else {
         await apiFetch('/api/leads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(form),
         });
       }
@@ -70,18 +106,38 @@ export default function LeadsPage() {
       setModal(null);
     } catch (err) {
       console.error('Save failed:', err);
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
+  };
+
+  const saveReq = async () => {
+    if (!reqForm.title.trim()) return alert('Job title is required');
+    setSaving(true);
+    try {
+      await apiFetch('/api/admin/requirements', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: reqForm.title,
+          client: activeLead.company_name,
+          stage: 'intake',
+          priority: reqForm.priority,
+          role_type: reqForm.role_type,
+          bill_rate: reqForm.bill_rate || 0,
+          pay_rate: reqForm.pay_rate || 0,
+          lead_id: activeLead.id,
+        }),
+      });
+      await load();
+      setModal(null);
+    } catch (err) {
+      console.error('Convert failed:', err);
+    } finally { setSaving(false); }
   };
 
   const del = async (id) => {
     try {
       await apiFetch(`/api/leads/${id}`, { method: 'DELETE' });
       setRows(prev => prev.filter(r => r.id !== id));
-    } catch (err) {
-      console.error('Delete failed:', err);
-    }
+    } catch (err) { console.error('Delete failed:', err); }
   };
 
   const filtered = filter === 'all' ? rows : rows.filter(r => r.status === filter);
@@ -101,7 +157,7 @@ export default function LeadsPage() {
     },
     {
       key: 'estimated_value', label: 'Est. Value',
-      render: v => <span style={{ color: 'var(--green)', fontWeight: 600 }}>{v ? '$' + parseFloat(v).toLocaleString() : '—'}</span>
+      render: v => <span style={{ color: 'var(--green)', fontWeight: 600 }}>{v ? '$' + parseFloat(v).toLocaleString('en-US') : '—'}</span>
     },
     {
       key: 'follow_up_date', label: 'Follow Up',
@@ -114,7 +170,35 @@ export default function LeadsPage() {
         </span>;
       }
     },
+    {
+      key: 'id', label: 'Requirements',
+      render: (v, row) => {
+        const count = reqCounts[v] || 0;
+        return (
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            {count > 0 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); openViewReqs(row); }}
+                style={{ background: 'var(--accent-blue-dim)', color: 'var(--accent-blue)', border: '1px solid var(--accent-blue)44', borderRadius: 10, padding: '2px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
+              >
+                {count} req{count > 1 ? 's' : ''}
+              </button>
+            )}
+            {row.status === 'won' && (
+              <button
+                onClick={(e) => { e.stopPropagation(); openConvert(row); }}
+                style={{ background: 'var(--green-dim)', color: 'var(--green)', border: '1px solid var(--green)44', borderRadius: 10, padding: '2px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
+              >
+                + Req
+              </button>
+            )}
+          </div>
+        );
+      }
+    },
   ];
+
+  const marginPct = calcMargin(reqForm.bill_rate, reqForm.pay_rate);
 
   return (
     <div>
@@ -157,7 +241,8 @@ export default function LeadsPage() {
         <AdminTable key={filter} columns={columns} rows={filtered} loading={loading} onEdit={openEdit} onDelete={del} pageSize={10} />
       </div>
 
-      {modal && (
+      {/* Add / Edit Lead modal */}
+      {(modal === 'add' || modal === 'edit') && (
         <AdminModal title={modal === 'edit' ? 'Edit Lead' : 'Add New Lead'} onClose={() => setModal(null)} onSave={save} saving={saving}>
           <Row>
             <Field label="Company Name" required><Input value={form.company_name} onChange={set('company_name')} placeholder="e.g. Tesla" /></Field>
@@ -176,6 +261,114 @@ export default function LeadsPage() {
             <Field label="Follow-up Date"><Input type="date" value={form.follow_up_date} onChange={set('follow_up_date')} /></Field>
           </Row>
           <Field label="Notes"><Textarea value={form.notes} onChange={set('notes')} placeholder="Key details about this lead…" rows={2} /></Field>
+        </AdminModal>
+      )}
+
+      {/* Convert Won Lead → Requirement modal */}
+      {modal === 'convert' && activeLead && (
+        <AdminModal
+          title="Convert Lead to Requirement"
+          onClose={() => setModal(null)}
+          onSave={saveReq}
+          saving={saving}
+          saveLabel="Create Requirement"
+        >
+          {/* Lead context banner */}
+          <div style={{ marginBottom: 16, padding: '10px 14px', background: 'var(--green-dim)', borderRadius: 8, border: '1px solid var(--green)33' }}>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3 }}>Won Lead</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{activeLead.company_name}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{activeLead.contact_name} · Est. ${parseFloat(activeLead.estimated_value || 0).toLocaleString('en-US')}</div>
+          </div>
+
+          {/* Req ID — auto-generated notice */}
+          <div style={{ marginBottom: 14, padding: '7px 12px', background: 'var(--bg-hover)', borderRadius: 6, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.6 }}>Req ID</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Auto-generated on save</span>
+          </div>
+
+          {/* Client pre-filled */}
+          <Field label="Client">
+            <div style={{ padding: '8px 10px', background: 'var(--bg-card2)', border: '1px solid var(--border-light)', borderRadius: 7, fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>
+              {activeLead.company_name}
+            </div>
+          </Field>
+
+          <Field label="Job Title" required>
+            <Input value={reqForm.title} onChange={setR('title')} placeholder="e.g. Senior React Developer" />
+          </Field>
+          <Row>
+            <Field label="Role Type">
+              <Select value={reqForm.role_type} onChange={setR('role_type')} options={ROLE_TYPES} />
+            </Field>
+            <Field label="Priority">
+              <Select value={reqForm.priority} onChange={setR('priority')} options={PRIORITIES} />
+            </Field>
+          </Row>
+          <Row>
+            <Field label="Bill Rate / Mo ($)" hint="Monthly rate billed to client">
+              <Input type="number" value={reqForm.bill_rate} onChange={setR('bill_rate')} placeholder="e.g. 16000" />
+            </Field>
+            <Field label="Pay Rate / Mo ($)" hint="Expected engineer cost">
+              <Input type="number" value={reqForm.pay_rate} onChange={setR('pay_rate')} placeholder="e.g. 9500" />
+            </Field>
+          </Row>
+          {parseFloat(reqForm.bill_rate) > 0 && (
+            <div style={{ padding: '8px 12px', borderRadius: 6, background: `${marginColor(marginPct)}15`, border: `1px solid ${marginColor(marginPct)}40`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Estimated Margin</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: marginColor(marginPct) }}>
+                {marginPct}%
+                <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 8, color: 'var(--text-muted)' }}>
+                  (${(parseFloat(reqForm.bill_rate) - parseFloat(reqForm.pay_rate || 0)).toLocaleString('en-US')}/mo)
+                </span>
+              </span>
+            </div>
+          )}
+        </AdminModal>
+      )}
+
+      {/* View linked requirements modal */}
+      {modal === 'view_reqs' && activeLead && (
+        <AdminModal
+          title={`Requirements — ${activeLead.company_name}`}
+          onClose={() => setModal(null)}
+          onSave={null}
+        >
+          <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{linkedReqs.length} requirement{linkedReqs.length !== 1 ? 's' : ''} from this lead</span>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => { setModal(null); setTimeout(() => openConvert(activeLead), 50); }}
+            >
+              + Add Another Req
+            </button>
+          </div>
+          {linkedReqs.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {linkedReqs.map(r => {
+                const pct = calcMargin(r.bill_rate, r.pay_rate);
+                return (
+                  <div key={r.id} style={{ padding: '10px 14px', background: 'var(--bg-card2)', border: '1px solid var(--border)', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-blue)', background: 'var(--accent-blue-dim)', padding: '2px 7px', borderRadius: 4 }}>{r.req_id}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: stageColors[r.stage], textTransform: 'capitalize' }}>{r.stage}</span>
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>{r.title}</div>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6 }}>
+                      <span className="tag tag-gray" style={{ fontSize: 10 }}>{r.role_type || 'Role TBD'}</span>
+                      {parseFloat(r.bill_rate) > 0 && (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: marginColor(pct) }}>{pct}% margin</span>
+                      )}
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                        {r.bill_rate > 0 ? `$${Number(r.bill_rate).toLocaleString('en-US')}/mo` : 'Rate TBD'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </AdminModal>
       )}
     </div>

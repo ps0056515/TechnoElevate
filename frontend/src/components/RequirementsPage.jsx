@@ -6,7 +6,7 @@ import ExportButton from './ExportButton.jsx';
 import SendReportModal from './SendReportModal.jsx';
 import { fmtRate, calcMargin, marginColor } from '../utils/marginUtils.js';
 
-const EMPTY = { req_id: '', title: '', client: '', stage: 'intake', days_in_stage: 0, stalled: false, priority: 'MED', role_type: '', bill_rate: '', pay_rate: '' };
+const EMPTY = { title: '', client: '', stage: 'intake', days_in_stage: 0, stalled: false, priority: 'MED', role_type: '', bill_rate: '', pay_rate: '', contract_id: '' };
 const STAGES = ['intake', 'sourcing', 'submission', 'screening', 'interviewing', 'closure'];
 const PRIORITIES = ['HIGH', 'MED', 'LOW'];
 
@@ -26,19 +26,28 @@ export default function RequirementsPage() {
   const [search, setSearch] = useState('');
   const [filterPriority, setFilterPriority] = useState('all');
   const [showSend, setShowSend] = useState(false);
+  const [availableTalent, setAvailableTalent] = useState([]);
+  const [contracts, setContracts] = useState([]);
+  const [assignTarget, setAssignTarget] = useState(null);   // req being assigned
+  const [assignTalentId, setAssignTalentId] = useState('');
+  const [closureNotice, setClosureNotice] = useState(null);  // {reqId, talentName}
 
   const load = () => {
     setLoading(true);
     apiFetch('/api/admin/requirements').then(r => r.json()).then(d => { setReqs(d); setLoading(false); });
   };
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+    apiFetch('/api/talent/available').then(r => r.json()).then(setAvailableTalent).catch(() => {});
+    apiFetch('/api/admin/contracts').then(r => r.json()).then(setContracts).catch(() => {});
+  }, []);
 
   const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
   const openAdd = () => { setForm(EMPTY); setModal('add'); };
   const openEdit = (row) => { setForm({ ...row }); setModal('edit'); };
 
   const save = async () => {
-    if (!form.req_id.trim() || !form.title.trim()) return alert('Req ID and Title are required');
+    if (!form.title.trim()) return alert('Job Title is required');
     setSaving(true);
     const url = modal === 'edit' ? `/api/admin/requirements/${form.id}` : '/api/admin/requirements';
     await apiFetch(url, {
@@ -58,11 +67,47 @@ export default function RequirementsPage() {
   const advance = async (id, currentStage) => {
     const idx = STAGES.indexOf(currentStage);
     if (idx >= STAGES.length - 1) return;
+    const nextStage = STAGES[idx + 1];
     await apiFetch(`/api/pipeline/${id}/stage`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stage: STAGES[idx + 1] }),
+      body: JSON.stringify({ stage: nextStage }),
+    });
+    if (nextStage === 'closure') {
+      const req = reqs.find(r => r.id === id);
+      if (req?.assigned_talent_name) {
+        setClosureNotice({ reqId: id, talentName: req.assigned_talent_name, client: req.client });
+        setTimeout(() => setClosureNotice(null), 6000);
+      }
+    }
+    load();
+    apiFetch('/api/talent/available').then(r => r.json()).then(setAvailableTalent).catch(() => {});
+  };
+
+  const openAssign = (req) => {
+    setAssignTarget(req);
+    setAssignTalentId(req.assigned_talent_id ? String(req.assigned_talent_id) : '');
+  };
+
+  const doAssign = async () => {
+    if (!assignTarget) return;
+    await apiFetch(`/api/pipeline/${assignTarget.id}/assign`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ talent_id: assignTalentId ? parseInt(assignTalentId) : null }),
+    });
+    setAssignTarget(null);
+    load();
+    apiFetch('/api/talent/available').then(r => r.json()).then(setAvailableTalent).catch(() => {});
+  };
+
+  const rejectReq = async (req) => {
+    const reason = prompt(`Rejection reason for "${req.title}":\n(e.g. "Budget freeze", "Role cancelled")`);
+    if (reason === null) return;
+    await apiFetch(`/api/pipeline/${req.id}/reject`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rejection_reason: reason }),
     });
     load();
+    apiFetch('/api/talent/available').then(r => r.json()).then(setAvailableTalent).catch(() => {});
   };
 
   const filtered = reqs.filter(r => {
@@ -167,14 +212,30 @@ export default function RequirementsPage() {
                     border: req.stalled ? '1px solid rgba(255,71,87,0.4)' : '1px solid var(--border)',
                     borderRadius: 7, padding: '9px 10px',
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent-blue)', background: 'var(--accent-blue-dim)', padding: '1px 5px', borderRadius: 3 }}>{req.req_id}</span>
                       {req.stalled && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--red)', background: 'var(--red-dim)', padding: '1px 5px', borderRadius: 3 }}>STALLED</span>}
+                      {req.lead_company && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--purple)', background: 'rgba(165,94,234,0.12)', padding: '1px 5px', borderRadius: 3 }}>↑ {req.lead_company}</span>}
                     </div>
                     <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3, marginBottom: 3 }}>{req.title}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{req.client}</div>
                     {req.days_in_stage > 0 && (
                       <div style={{ fontSize: 10, color: req.stalled ? 'var(--red)' : 'var(--text-muted)', marginTop: 4 }}>⏱ {req.days_in_stage}d in stage</div>
+                    )}
+                    {/* Assigned Talent badge */}
+                    {req.assigned_talent_name
+                      ? <div style={{ marginTop: 5, padding: '3px 6px', borderRadius: 4, background: 'rgba(46,213,115,0.1)', border: '1px solid rgba(46,213,115,0.3)', fontSize: 10, color: 'var(--green)', fontWeight: 600 }}>
+                          👤 {req.assigned_talent_name}
+                        </div>
+                      : <button onClick={() => openAssign(req)} style={{ marginTop: 5, width: '100%', padding: '3px 0', background: 'rgba(0,170,255,0.06)', border: '1px dashed rgba(0,170,255,0.3)', borderRadius: 4, fontSize: 10, color: 'var(--accent-blue)', cursor: 'pointer' }}>
+                          + Assign Talent
+                        </button>
+                    }
+                    {/* Contract badge */}
+                    {req.contract_sow_id && (
+                      <div style={{ marginTop: 4, fontSize: 9, color: 'var(--amber)', background: 'rgba(255,165,2,0.1)', border: '1px solid rgba(255,165,2,0.25)', padding: '2px 5px', borderRadius: 3 }}>
+                        📄 {req.contract_sow_id}
+                      </div>
                     )}
                     {parseFloat(req.bill_rate) > 0 && (() => {
                       const pct = calcMargin(req.bill_rate, req.pay_rate);
@@ -189,7 +250,12 @@ export default function RequirementsPage() {
                       <span className={`tag ${req.priority === 'HIGH' ? 'tag-red' : req.priority === 'MED' ? 'tag-amber' : 'tag-gray'}`} style={{ fontSize: 9 }}>{req.priority}</span>
                       <span className="tag tag-gray" style={{ fontSize: 9 }}>{req.role_type}</span>
                     </div>
-                    <div style={{ display: 'flex', gap: 4, marginTop: 7 }}>
+                    {req.rejection_reason && (
+                      <div style={{ marginTop: 4, fontSize: 9, color: 'var(--red)', background: 'var(--red-dim)', padding: '2px 5px', borderRadius: 3 }}>
+                        ↩ {req.rejection_reason}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 4, marginTop: 7, flexWrap: 'wrap' }}>
                       <button onClick={() => openEdit(req)} style={{ flex: 1, padding: '3px 0', background: 'transparent', border: '1px solid var(--border-light)', borderRadius: 4, fontSize: 10, color: 'var(--text-muted)', cursor: 'pointer' }}
                         onMouseEnter={e => { e.target.style.background = 'var(--bg-hover)'; e.target.style.color = 'var(--text-primary)'; }}
                         onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = 'var(--text-muted)'; }}>
@@ -200,6 +266,11 @@ export default function RequirementsPage() {
                           onMouseEnter={e => { e.target.style.background = 'var(--bg-hover)'; e.target.style.color = 'var(--text-primary)'; }}
                           onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = 'var(--text-muted)'; }}>
                           Next →
+                        </button>
+                      )}
+                      {['screening', 'interviewing'].includes(stage) && (
+                        <button onClick={() => rejectReq(req)} style={{ padding: '3px 6px', background: 'transparent', border: '1px solid rgba(255,71,87,0.4)', borderRadius: 4, fontSize: 10, color: 'var(--red)', cursor: 'pointer' }}>
+                          ✕ Reject
                         </button>
                       )}
                     </div>
@@ -215,7 +286,7 @@ export default function RequirementsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-card2)' }}>
-                {['Req ID', 'Title', 'Client', 'Stage', 'Priority', 'Days', 'Role Type', 'Bill Rate', 'Pay Rate', 'Margin', ''].map(h => (
+                {['Req ID', 'Title', 'Client', 'Stage', 'Priority', 'Days', 'Role Type', 'Lead', 'Assigned To', 'Contract', 'Bill Rate', 'Pay Rate', 'Margin', ''].map(h => (
                   <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.8, textTransform: 'uppercase' }}>{h}</th>
                 ))}
               </tr>
@@ -232,6 +303,21 @@ export default function RequirementsPage() {
                   <td style={{ padding: '10px 14px' }}><span style={{ color: priorityColors[req.priority], fontWeight: 700 }}>{req.priority}</span></td>
                   <td style={{ padding: '10px 14px', color: req.days_in_stage > 3 ? 'var(--amber)' : 'var(--text-muted)' }}>{req.days_in_stage}d</td>
                   <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>{req.role_type}</td>
+                  <td style={{ padding: '10px 14px' }}>
+                    {req.lead_company
+                      ? <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--purple)', background: 'rgba(165,94,234,0.12)', padding: '2px 6px', borderRadius: 4 }}>↑ {req.lead_company}</span>
+                      : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  </td>
+                  <td style={{ padding: '10px 14px' }}>
+                    {req.assigned_talent_name
+                      ? <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)' }}>👤 {req.assigned_talent_name}</span>
+                      : <button onClick={() => openAssign(req)} className="btn btn-ghost btn-sm" style={{ padding: '2px 8px', fontSize: 10, color: 'var(--accent-blue)' }}>+ Assign</button>}
+                  </td>
+                  <td style={{ padding: '10px 14px' }}>
+                    {req.contract_sow_id
+                      ? <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--amber)', background: 'rgba(255,165,2,0.1)', padding: '2px 6px', borderRadius: 4 }}>📄 {req.contract_sow_id}</span>
+                      : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  </td>
                   <td style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontWeight: 500 }}>{fmtRate(req.bill_rate)}</td>
                   <td style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontWeight: 500 }}>{fmtRate(req.pay_rate)}</td>
                   <td style={{ padding: '10px 14px' }}>
@@ -256,6 +342,64 @@ export default function RequirementsPage() {
         </div>
       )}
 
+      {/* Closure notice toast */}
+      {closureNotice && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
+          background: 'var(--green)', color: '#fff', borderRadius: 10,
+          padding: '14px 20px', boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+          maxWidth: 320, fontSize: 13, lineHeight: 1.5,
+        }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Requirement Closed!</div>
+          <div>Engagement auto-created for <strong>{closureNotice.talentName}</strong> at <strong>{closureNotice.client}</strong>.</div>
+          <div style={{ fontSize: 11, marginTop: 6, opacity: 0.85 }}>Check Engagements page for the new checklist.</div>
+        </div>
+      )}
+
+      {/* Assign Talent modal */}
+      {assignTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 12, padding: 24, minWidth: 360, maxWidth: 440, border: '1px solid var(--border)' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Assign Talent</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+              {assignTarget.req_id} · {assignTarget.title} · {assignTarget.client}
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.6, display: 'block', marginBottom: 6 }}>Select Engineer</label>
+              <select
+                value={assignTalentId}
+                onChange={e => setAssignTalentId(e.target.value)}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1px solid var(--border-light)', background: 'var(--bg-input, var(--bg-card2))', color: 'var(--text-primary)', fontSize: 13, fontFamily: 'var(--font)' }}
+              >
+                <option value="">— Unassign / None —</option>
+                {availableTalent.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} · {t.role} ({t.status}){t.pay_rate > 0 ? ` · $${Number(t.pay_rate).toLocaleString('en-US')}/mo` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {assignTalentId && (() => {
+              const t = availableTalent.find(x => String(x.id) === String(assignTalentId));
+              if (!t || !t.pay_rate) return null;
+              const billRate = parseFloat(assignTarget.bill_rate);
+              if (!billRate) return <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>Set a bill rate on this requirement to see margin preview.</div>;
+              const pct = calcMargin(billRate, t.pay_rate);
+              return (
+                <div style={{ marginBottom: 14, padding: '8px 12px', borderRadius: 6, background: `${marginColor(pct)}15`, border: `1px solid ${marginColor(pct)}40`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Projected Margin</span>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: marginColor(pct) }}>{pct}%</span>
+                </div>
+              );
+            })()}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setAssignTarget(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={doAssign}>Save Assignment</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSend && (
         <SendReportModal
           reportType="Requirements Pipeline"
@@ -266,14 +410,20 @@ export default function RequirementsPage() {
 
       {modal && (
         <AdminModal title={modal === 'edit' ? 'Edit Requirement' : 'Add Requirement'} onClose={() => setModal(null)} onSave={save} saving={saving}>
+          {/* Req ID — show as badge in edit, auto-generated notice in add */}
+          <div style={{ marginBottom: 14, padding: '7px 12px', background: 'var(--bg-hover)', borderRadius: 6, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.6 }}>Req ID</span>
+            {modal === 'edit'
+              ? <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-blue)' }}>{form.req_id}</span>
+              : <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Auto-generated on save</span>}
+          </div>
           <Row>
-            <Field label="Req ID" required><Input value={form.req_id} onChange={set('req_id')} placeholder="e.g. Req-450" /></Field>
             <Field label="Priority"><Select value={form.priority} onChange={set('priority')} options={PRIORITIES} /></Field>
+            <Field label="Role Type"><Input value={form.role_type} onChange={set('role_type')} placeholder="e.g. Full Stack" /></Field>
           </Row>
           <Field label="Job Title" required><Input value={form.title} onChange={set('title')} placeholder="e.g. Senior React Developer" /></Field>
           <Row>
             <Field label="Client"><Input value={form.client} onChange={set('client')} placeholder="e.g. Tesla" /></Field>
-            <Field label="Role Type"><Input value={form.role_type} onChange={set('role_type')} placeholder="e.g. Full Stack" /></Field>
           </Row>
           <Row>
             <Field label="Stage"><Select value={form.stage} onChange={set('stage')} options={STAGES} /></Field>
@@ -293,10 +443,24 @@ export default function RequirementsPage() {
               <span style={{ fontSize: 16, fontWeight: 800, color: marginColor(calcMargin(form.bill_rate, form.pay_rate)) }}>
                 {calcMargin(form.bill_rate, form.pay_rate)}%
                 <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 8, color: 'var(--text-muted)' }}>
-                  (${(parseFloat(form.bill_rate) - parseFloat(form.pay_rate || 0)).toLocaleString()}/mo)
+                  (${(parseFloat(form.bill_rate) - parseFloat(form.pay_rate || 0)).toLocaleString('en-US')}/mo)
                 </span>
               </span>
             </div>
+          )}
+          {contracts.length > 0 && (
+            <Field label="Link to Contract (optional)">
+              <select
+                value={form.contract_id || ''}
+                onChange={e => set('contract_id')(e.target.value || null)}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1px solid var(--border-light)', background: 'var(--bg-input, var(--bg-card2))', color: 'var(--text-primary)', fontSize: 13, fontFamily: 'var(--font)' }}
+              >
+                <option value="">— Not linked —</option>
+                {contracts.map(c => (
+                  <option key={c.id} value={c.id}>{c.sow_id} · {c.client}</option>
+                ))}
+              </select>
+            </Field>
           )}
           <Toggle label="Mark as Stalled" value={form.stalled} onChange={set('stalled')} />
         </AdminModal>

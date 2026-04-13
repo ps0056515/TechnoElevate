@@ -104,6 +104,83 @@ ALTER TABLE talent ADD COLUMN IF NOT EXISTS pay_rate DECIMAL(10,2) DEFAULT 0;
 ALTER TABLE requirements ADD COLUMN IF NOT EXISTS bill_rate DECIMAL(10,2) DEFAULT 0;
 ALTER TABLE requirements ADD COLUMN IF NOT EXISTS pay_rate DECIMAL(10,2) DEFAULT 0;
 
+-- Lead → Requirement traceability
+ALTER TABLE requirements ADD COLUMN IF NOT EXISTS lead_id INTEGER REFERENCES leads(id) ON DELETE SET NULL;
+
+-- Talent assignment + Contract linkage on requirements
+ALTER TABLE requirements ADD COLUMN IF NOT EXISTS assigned_talent_id INTEGER REFERENCES talent(id) ON DELETE SET NULL;
+ALTER TABLE requirements ADD COLUMN IF NOT EXISTS contract_id INTEGER REFERENCES contracts(id) ON DELETE SET NULL;
+
+-- Engagement traceability back to requirement
+ALTER TABLE engagements ADD COLUMN IF NOT EXISTS req_id INTEGER REFERENCES requirements(id) ON DELETE SET NULL;
+
+-- ── FEATURE ADDITIONS ─────────────────────────────────────────────────────────
+
+-- Engagement closure tracking
+ALTER TABLE engagements ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active','completed'));
+ALTER TABLE engagements ADD COLUMN IF NOT EXISTS end_date DATE;
+ALTER TABLE engagements ADD COLUMN IF NOT EXISTS end_reason TEXT;
+
+-- Requirement rejection + candidate count tracking
+ALTER TABLE requirements ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+ALTER TABLE requirements ADD COLUMN IF NOT EXISTS submitted_count INTEGER DEFAULT 0;
+ALTER TABLE requirements ADD COLUMN IF NOT EXISTS interview_count INTEGER DEFAULT 0;
+
+-- Project delivery phase
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS phase VARCHAR(30) DEFAULT 'discovery' CHECK (phase IN ('discovery','design','development','testing','uat','go_live','delivered'));
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS budget DECIMAL(12,2) DEFAULT 0;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS actual_spend DECIMAL(12,2) DEFAULT 0;
+
+-- Invoices (linked to contracts and/or engagements)
+CREATE TABLE IF NOT EXISTS invoices (
+  id SERIAL PRIMARY KEY,
+  invoice_number VARCHAR(50) UNIQUE NOT NULL,
+  contract_id INTEGER REFERENCES contracts(id) ON DELETE SET NULL,
+  engagement_id INTEGER REFERENCES engagements(id) ON DELETE SET NULL,
+  client VARCHAR(100) NOT NULL,
+  amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  issued_date DATE NOT NULL,
+  due_date DATE NOT NULL,
+  paid_date DATE,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','sent','paid','overdue')),
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Project milestones
+CREATE TABLE IF NOT EXISTS project_milestones (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+  title VARCHAR(200) NOT NULL,
+  due_date DATE,
+  completed BOOLEAN DEFAULT FALSE,
+  completed_date DATE,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Project team composition (talent assigned to projects)
+CREATE TABLE IF NOT EXISTS project_talent (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+  talent_id INTEGER REFERENCES talent(id) ON DELETE CASCADE,
+  role VARCHAR(100),
+  joined_date DATE DEFAULT CURRENT_DATE,
+  UNIQUE(project_id, talent_id)
+);
+
+-- Multiple candidates per requirement
+CREATE TABLE IF NOT EXISTS requirement_candidates (
+  id SERIAL PRIMARY KEY,
+  req_id INTEGER REFERENCES requirements(id) ON DELETE CASCADE,
+  talent_id INTEGER REFERENCES talent(id) ON DELETE CASCADE,
+  status VARCHAR(30) DEFAULT 'submitted' CHECK (status IN ('submitted','screening','interviewing','offered','rejected','placed')),
+  submitted_date DATE DEFAULT CURRENT_DATE,
+  feedback TEXT,
+  rejection_reason TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS case_studies (
   id SERIAL PRIMARY KEY,
   project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,

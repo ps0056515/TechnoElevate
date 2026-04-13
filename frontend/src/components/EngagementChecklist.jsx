@@ -22,6 +22,16 @@ export default function EngagementChecklist() {
     load();
   };
 
+  const closeEngagement = async (engId) => {
+    const reason = prompt('Reason for closing engagement (optional):');
+    if (reason === null) return; // cancelled
+    await apiFetch(`/api/engagements/${engId}/close`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ end_reason: reason }),
+    });
+    load();
+  };
+
   const getItems = (engId) => data?.checklistItems?.filter(i => i.engagement_id === engId) || [];
   const getProgress = (engId) => {
     const items = getItems(engId);
@@ -90,12 +100,26 @@ export default function EngagementChecklist() {
         {selectedEng && (
           <div>
             <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>{selectedEng.talent_name}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {selectedEng.talent_name}
+                  {selectedEng.status === 'completed'
+                    ? <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)', background: 'var(--green-dim)', padding: '2px 8px', borderRadius: 12 }}>CLOSED</span>
+                    : <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent-blue)', background: 'var(--accent-blue-dim)', padding: '2px 8px', borderRadius: 12 }}>ACTIVE</span>}
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   {selectedEng.client} · {selectedEng.role} · Started {new Date(selectedEng.start_date).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  {selectedEng.end_date && ` · Closed ${new Date(selectedEng.end_date).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}`}
                 </div>
               </div>
+              {selectedEng.status !== 'completed' && (
+                <button
+                  onClick={() => closeEngagement(selectedEng.id)}
+                  style={{ padding: '5px 14px', borderRadius: 6, border: '1px solid rgba(255,71,87,0.4)', background: 'var(--red-dim)', color: 'var(--red)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Close Engagement
+                </button>
+              )}
             </div>
 
             {/* 7-stage timeline */}

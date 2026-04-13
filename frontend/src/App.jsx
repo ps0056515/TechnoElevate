@@ -12,19 +12,21 @@ import LeadsPage from './components/LeadsPage.jsx';
 import RequirementsPage from './components/RequirementsPage.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import LoginPage from './components/LoginPage.jsx';
+import Client360Page from './components/Client360Page.jsx';
 
 const tabs = ['Overview', 'Pro Services', 'Managed Services', 'Talent', 'Contracts'];
 
-const PAGE_TITLES = {
-  Dashboard: 'Daily Standup',
-  Leads: 'Leads',
-  Requirements: 'Requirements',
-  Talent: 'Talent',
-  Contracts: 'Contracts',
-  Projects: 'Projects',
-  Admin: 'Data Management',
-  Settings: 'Settings',
-};
+  const PAGE_TITLES = {
+    Dashboard: 'Daily Standup',
+    Leads: 'Leads',
+    Requirements: 'Requirements',
+    Talent: 'Talent',
+    Contracts: 'Contracts',
+    Projects: 'Projects',
+    'Client 360': 'Client 360°',
+    Admin: 'Data Management',
+    Settings: 'Settings',
+  };
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -57,6 +59,7 @@ export default function App() {
   const renderContent = () => {
     if (activeNav === 'Settings') return <SettingsPage user={user} onLogout={handleLogout} onUpdateUser={handleUpdateUser} />;
     if (activeNav === 'Admin') return <AdminPage />;
+    if (activeNav === 'Client 360') return <Client360Page />;
     if (activeNav === 'Leads') return <LeadsPage />;
     if (activeNav === 'Requirements') return <RequirementsPage />;
     if (activeNav === 'Talent') return <TalentPage />;
@@ -76,7 +79,7 @@ export default function App() {
             }}>{t}</button>
           ))}
         </div>
-        <DashboardOverview activeTab={activeTab} />
+        <DashboardOverview activeTab={activeTab} onNavigate={setActiveNav} />
       </>
     );
   };
