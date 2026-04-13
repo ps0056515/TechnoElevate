@@ -4,7 +4,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         BROWSER (port 3000)                     │
+│                         BROWSER (port 7000)                     │
 │                                                                 │
 │  React 18 + Vite                                                │
 │  ┌──────────┐  ┌──────────────────────────────────────────┐    │
@@ -15,10 +15,10 @@
 │  └──────────┘  └──────────────────────────────────────────┘    │
 │                         │  fetch /api/*                        │
 └─────────────────────────┼───────────────────────────────────────┘
-                          │  Vite proxy → :4000
+                          │  Vite proxy → :6000
                           ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    EXPRESS API (port 4000)                       │
+│                    EXPRESS API (port 6000)                       │
 │                                                                 │
 │   server.js                                                     │
 │   ├── CORS + JSON middleware                                    │
@@ -299,5 +299,5 @@ Browser                     Express                    PostgreSQL
 | PostgreSQL text array for skills | Avoids a separate `talent_skills` join table for this scale |
 | Denormalised `talent_name` in engagements | Prevents broken display if a talent record is later deleted |
 | `days_remaining` computed in SQL | Keeps the client free of date arithmetic; consistent with DB timezone |
-| Vite proxy `/api` → `:4000` | Avoids CORS in development; production needs nginx or similar reverse proxy |
+| Vite proxy `/api` → `:6000` | Avoids CORS in development; production needs nginx or similar reverse proxy |
 | Demo-only auth (hardcoded users) | v1 scope; swap with JWT + bcrypt + `users` table for production |

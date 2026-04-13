@@ -6,9 +6,9 @@ const authRoutes = require('./routes/auth');
 const { requireAuth } = require('./middleware/auth');
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 6000;
 
-const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000,http://localhost:3001')
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:7000')
   .split(',')
   .map(o => o.trim());
 

@@ -1,6 +1,6 @@
 # TechnoElevate — API Reference
 
-Base URL (local dev): `http://localhost:4000/api`  
+Base URL (local dev): `http://localhost:6000/api`  
 All endpoints return `Content-Type: application/json`.  
 Error responses: `{ "error": "<message>" }` with HTTP 500.
 

@@ -51,7 +51,7 @@ cp backend/.env.example backend/.env
 Open `backend/.env` and configure:
 
 ```env
-PORT=4000
+PORT=6000
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=techno_elevate
@@ -65,7 +65,7 @@ DB_PASSWORD=your_postgres_password_here
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `PORT` | `4000` | No | Express API server port |
+| `PORT` | `6000` | No | Express API server port |
 | `DB_HOST` | `localhost` | No | PostgreSQL hostname or IP |
 | `DB_PORT` | `5432` | No | PostgreSQL port |
 | `DB_NAME` | `techno_elevate` | No | Database name (created by seed.js) |
@@ -151,10 +151,10 @@ Uses `nodemon` for auto-reload on file changes.
 **Expected output:**
 ```
 [nodemon] starting `node server.js`
-TechnoElevate API running on http://localhost:4000
+TechnoElevate API running on http://localhost:6000
 ```
 
-Verify: open http://localhost:4000/api/ping — should return `{"status":"ok","timestamp":"..."}`.
+Verify: open http://localhost:6000/api/ping — should return `{"status":"ok","timestamp":"..."}`.
 
 To run without auto-reload:
 ```bash
@@ -173,16 +173,16 @@ npm run dev
 **Expected output:**
 ```
 VITE v5.x.x  ready in 2000 ms
-➜  Local:   http://localhost:3000/
+➜  Local:   http://localhost:7000/
 ```
 
-If port 3000 is occupied, Vite will try 3001, 3002, etc.
+The dev server is fixed to port **7000** (`strictPort: true` in `vite.config.js`). If it is busy, free the port or change the config.
 
 ---
 
 ## Step 7 — Open the App
 
-Navigate to **http://localhost:3000** in your browser.
+Navigate to **http://localhost:7000** in your browser.
 
 Use one of the demo accounts:
 
@@ -238,13 +238,13 @@ After both servers are running, check these endpoints:
 
 ```bash
 # Backend health
-curl http://localhost:4000/api/ping
+curl http://localhost:6000/api/ping
 
 # Attention issues
-curl http://localhost:4000/api/attention
+curl http://localhost:6000/api/attention
 
 # Talent lifecycle
-curl http://localhost:4000/api/talent/lifecycle
+curl http://localhost:6000/api/talent/lifecycle
 ```
 
 All should return valid JSON.
@@ -256,25 +256,25 @@ All should return valid JSON.
 ### Port already in use
 
 ```
-Error: listen EADDRINUSE: address already in use :::4000
+Error: listen EADDRINUSE: address already in use :::6000
 ```
 
 Find and kill the existing process:
 
 **Windows (PowerShell)**:
 ```powershell
-netstat -ano | findstr :4000
+netstat -ano | findstr :6000
 taskkill /PID <pid> /F
 ```
 
 **macOS/Linux**:
 ```bash
-lsof -ti:4000 | xargs kill
+lsof -ti:6000 | xargs kill
 ```
 
 ### Frontend cannot reach the API
 
-The Vite dev server proxies `/api` → `http://localhost:4000`. If the backend is on a different port, update `vite.config.js`:
+The Vite dev server proxies `/api` → `http://localhost:6000`. If the backend is on a different port, update `vite.config.js`:
 
 ```js
 proxy: {

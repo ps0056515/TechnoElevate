@@ -43,7 +43,7 @@ git push origin main
 Set environment variables in Railway for the backend service:
 
 ```
-PORT=4000
+PORT=6000
 DB_HOST=${{Postgres.PGHOST}}
 DB_PORT=${{Postgres.PGPORT}}
 DB_NAME=${{Postgres.PGDATABASE}}
@@ -88,7 +88,7 @@ Update `vite.config.js` to use `VITE_API_URL` in production (see below).
 4. Start command: `npm start`
 5. Environment variables:
    ```
-   PORT=4000
+   PORT=6000
    DB_HOST=<render-db-host>
    DB_PORT=5432
    DB_NAME=<db-name>
@@ -217,7 +217,7 @@ server {
 
     # Backend API proxy
     location /api {
-        proxy_pass http://localhost:4000;
+        proxy_pass http://localhost:6000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -255,10 +255,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
   server: {
-    port: 3000,
+    port: 7000,
     proxy: {
       '/api': {
-        target: 'http://localhost:4000',
+        target: 'http://localhost:6000',
         changeOrigin: true,
       },
     },

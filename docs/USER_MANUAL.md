@@ -23,7 +23,7 @@ A feature-by-feature guide for operations, delivery, and admin users.
 
 ## Logging In
 
-Open the app at **http://localhost:3000**.
+Open the app at **http://localhost:7000**.
 
 You will see the TechnoElevate login screen. Enter your email and password, or use the **Quick Demo Access** buttons at the bottom to auto-fill credentials.
 

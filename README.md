@@ -22,8 +22,8 @@ Full-stack operations dashboard for staffing and professional services delivery 
 
 | Layer | Technology |
 |-------|-----------|
-| **Frontend** | React 18 + Vite + Recharts (dev port **3000**) |
-| **Backend** | Node.js + Express (port **4000**) |
+| **Frontend** | React 18 + Vite + Recharts (dev port **7000**) |
+| **Backend** | Node.js + Express (port **6000**) |
 | **Database** | PostgreSQL (default port **5432**) |
 
 ---
@@ -81,7 +81,7 @@ cd frontend
 npm run dev
 ```
 
-Open **http://localhost:3000**
+Open **http://localhost:7000**
 
 ---
 
@@ -91,7 +91,8 @@ Create `backend/.env` (copy from `backend/.env.example`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `4000` | Express server port |
+| `PORT` | `6000` | Express server port |
+| `FRONTEND_URL` | `http://localhost:7000` | CORS allowed origins (comma-separated) |
 | `DB_HOST` | `localhost` | PostgreSQL host |
 | `DB_PORT` | `5432` | PostgreSQL port |
 | `DB_NAME` | `techno_elevate` | Database name |
@@ -115,7 +116,7 @@ TechnoElevate-git/
 │   └── package.json
 ├── frontend/
 │   ├── index.html
-│   ├── vite.config.js      # Dev server + /api proxy → :4000
+│   ├── vite.config.js      # Dev server :7000 + /api proxy → :6000
 │   ├── src/
 │   │   ├── main.jsx
 │   │   ├── App.jsx         # Auth gate + navigation routing
