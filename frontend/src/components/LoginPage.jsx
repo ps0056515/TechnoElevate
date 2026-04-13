@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { setToken } from '../api.js';
+import { setToken, apiUrl } from '../api.js';
 
 const DEMO_USERS = [
   { email: 'sarah@techno.com', password: 'admin123', label: 'Sarah K.', role: 'Delivery Lead', initials: 'SK', color: 'linear-gradient(135deg, #4f7cff, #a55eea)' },
@@ -26,7 +26,7 @@ export default function LoginPage({ onLogin }) {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.toLowerCase().trim(), password }),

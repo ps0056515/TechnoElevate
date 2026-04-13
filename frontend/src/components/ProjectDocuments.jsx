@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { apiFetch } from '../api.js';
+import { apiFetch, apiUrl } from '../api.js';
 
 const DOC_TYPES = ['RFP', 'SOW', 'Proposal', 'Amendment', 'Other'];
 
@@ -49,7 +49,7 @@ export default function ProjectDocuments({ project, onCaseStudyGenerated }) {
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     try {
-      const res = await fetch(`/api/projects/${project.id}/documents`, { method: 'POST', headers, body: formData });
+      const res = await fetch(apiUrl(`/api/projects/${project.id}/documents`), { method: 'POST', headers, body: formData });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || 'Upload failed');
@@ -71,7 +71,7 @@ export default function ProjectDocuments({ project, onCaseStudyGenerated }) {
 
   const handleDownload = (doc) => {
     const token = localStorage.getItem('te_token');
-    const url = `/api/projects/documents/${doc.id}/file`;
+    const url = apiUrl(`/api/projects/documents/${doc.id}/file`);
     const a = document.createElement('a');
     a.href = url + (token ? `?token=${token}` : '');
     a.download = doc.file_name;
