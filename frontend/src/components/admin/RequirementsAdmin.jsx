@@ -3,8 +3,9 @@ import AdminModal from './AdminModal.jsx';
 import AdminTable from './AdminTable.jsx';
 import { Field, Input, Select, Row, Toggle } from './FormField.jsx';
 import { apiFetch } from '../../api.js';
+import { calcMargin, marginColor } from '../../utils/marginUtils.js';
 
-const EMPTY = { req_id: '', title: '', client: '', stage: 'intake', days_in_stage: 0, stalled: false, priority: 'MED', role_type: '' };
+const EMPTY = { req_id: '', title: '', client: '', stage: 'intake', days_in_stage: 0, stalled: false, priority: 'MED', role_type: '', bill_rate: '', pay_rate: '' };
 const STAGES = ['intake', 'sourcing', 'submission', 'screening', 'interviewing', 'closure'];
 const PRIORITIES = ['HIGH', 'MED', 'LOW'];
 
@@ -56,6 +57,9 @@ export default function RequirementsAdmin() {
     { key: 'priority', label: 'Priority', render: v => <span style={{ color: priorityColors[v], fontWeight: 700 }}>{v}</span> },
     { key: 'days_in_stage', label: 'Days', render: (v, row) => <span style={{ color: row.stalled ? 'var(--red)' : 'var(--text-secondary)' }}>{v}d{row.stalled ? ' ⚠' : ''}</span> },
     { key: 'role_type', label: 'Role Type' },
+    { key: 'bill_rate', label: 'Bill Rate', render: v => <span style={{ color: 'var(--text-secondary)' }}>{v > 0 ? `$${Number(v).toLocaleString()}` : '—'}</span> },
+    { key: 'pay_rate', label: 'Pay Rate', render: v => <span style={{ color: 'var(--text-secondary)' }}>{v > 0 ? `$${Number(v).toLocaleString()}` : '—'}</span> },
+    { key: 'bill_rate', label: 'Margin', render: (v, row) => { const pct = calcMargin(v, row.pay_rate); return pct !== null ? <span style={{ fontWeight: 700, color: marginColor(pct) }}>{pct}%</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>; } },
   ];
 
   return (
@@ -83,6 +87,25 @@ export default function RequirementsAdmin() {
             <Field label="Stage"><Select value={form.stage} onChange={set('stage')} options={STAGES} /></Field>
             <Field label="Days in Stage"><Input type="number" value={form.days_in_stage} onChange={set('days_in_stage')} /></Field>
           </Row>
+          <Row>
+            <Field label="Bill Rate / Mo ($)" hint="Monthly rate billed to client">
+              <Input type="number" value={form.bill_rate} onChange={set('bill_rate')} placeholder="e.g. 16000" />
+            </Field>
+            <Field label="Pay Rate / Mo ($)" hint="Monthly engineer cost">
+              <Input type="number" value={form.pay_rate} onChange={set('pay_rate')} placeholder="e.g. 9500" />
+            </Field>
+          </Row>
+          {parseFloat(form.bill_rate) > 0 && (
+            <div style={{ marginBottom: 14, padding: '8px 12px', borderRadius: 6, background: `${marginColor(calcMargin(form.bill_rate, form.pay_rate))}15`, border: `1px solid ${marginColor(calcMargin(form.bill_rate, form.pay_rate))}40`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Estimated Margin</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: marginColor(calcMargin(form.bill_rate, form.pay_rate)) }}>
+                {calcMargin(form.bill_rate, form.pay_rate)}%
+                <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 8, color: 'var(--text-muted)' }}>
+                  (${(parseFloat(form.bill_rate) - parseFloat(form.pay_rate || 0)).toLocaleString()}/mo)
+                </span>
+              </span>
+            </div>
+          )}
           <Toggle label="Mark as Stalled" value={form.stalled} onChange={set('stalled')} />
         </AdminModal>
       )}

@@ -99,6 +99,11 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS industry VARCHAR(100);
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS sector VARCHAR(100);
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS geography VARCHAR(100);
 
+-- Margin tracking: pay_rate on talent, bill_rate + pay_rate on requirements
+ALTER TABLE talent ADD COLUMN IF NOT EXISTS pay_rate DECIMAL(10,2) DEFAULT 0;
+ALTER TABLE requirements ADD COLUMN IF NOT EXISTS bill_rate DECIMAL(10,2) DEFAULT 0;
+ALTER TABLE requirements ADD COLUMN IF NOT EXISTS pay_rate DECIMAL(10,2) DEFAULT 0;
+
 CREATE TABLE IF NOT EXISTS case_studies (
   id SERIAL PRIMARY KEY,
   project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,

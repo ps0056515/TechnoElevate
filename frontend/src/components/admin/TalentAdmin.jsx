@@ -4,7 +4,7 @@ import AdminTable from './AdminTable.jsx';
 import { Field, Input, Select, Row } from './FormField.jsx';
 import { apiFetch } from '../../api.js';
 
-const EMPTY = { name: '', role: '', status: 'bench', bench_start_date: '', idle_hours: 0, current_client: '', skills: '' };
+const EMPTY = { name: '', role: '', status: 'bench', bench_start_date: '', idle_hours: 0, current_client: '', skills: '', pay_rate: '' };
 const STATUS_OPTS = ['bench', 'in_process', 'interviewing', 'offered', 'deployed'];
 
 const statusColors = {
@@ -68,6 +68,10 @@ export default function TalentAdmin() {
         return <span style={{ color: 'var(--text-muted)' }}>{arr.slice(0, 2).join(', ')}{arr.length > 2 ? ` +${arr.length - 2}` : ''}</span>;
       }
     },
+    {
+      key: 'pay_rate', label: 'Pay Rate / Mo',
+      render: (v) => v > 0 ? <span style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>${Number(v).toLocaleString()}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>
+    },
   ];
 
   return (
@@ -95,6 +99,9 @@ export default function TalentAdmin() {
           </Row>
           <Field label="Skills (comma-separated)">
             <Input value={form.skills} onChange={set('skills')} placeholder="React, Node.js, MongoDB" />
+          </Field>
+          <Field label="Pay Rate / Mo ($)" hint="Monthly cost to company for this engineer">
+            <Input type="number" value={form.pay_rate} onChange={set('pay_rate')} placeholder="e.g. 9500" />
           </Field>
         </AdminModal>
       )}

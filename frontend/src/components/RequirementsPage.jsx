@@ -4,8 +4,9 @@ import { Field, Input, Select, Row, Toggle } from './admin/FormField.jsx';
 import { apiFetch } from '../api.js';
 import ExportButton from './ExportButton.jsx';
 import SendReportModal from './SendReportModal.jsx';
+import { fmtRate, calcMargin, marginColor } from '../utils/marginUtils.js';
 
-const EMPTY = { req_id: '', title: '', client: '', stage: 'intake', days_in_stage: 0, stalled: false, priority: 'MED', role_type: '' };
+const EMPTY = { req_id: '', title: '', client: '', stage: 'intake', days_in_stage: 0, stalled: false, priority: 'MED', role_type: '', bill_rate: '', pay_rate: '' };
 const STAGES = ['intake', 'sourcing', 'submission', 'screening', 'interviewing', 'closure'];
 const PRIORITIES = ['HIGH', 'MED', 'LOW'];
 
@@ -74,6 +75,10 @@ export default function RequirementsPage() {
   const totalOpen = reqs.filter(r => r.stage !== 'closure').length;
   const stalledCount = reqs.filter(r => r.stalled).length;
   const highCount = reqs.filter(r => r.priority === 'HIGH').length;
+  const ratedReqs = reqs.filter(r => parseFloat(r.bill_rate) > 0);
+  const avgMargin = ratedReqs.length > 0
+    ? Math.round(ratedReqs.reduce((sum, r) => sum + calcMargin(r.bill_rate, r.pay_rate), 0) / ratedReqs.length)
+    : null;
 
   return (
     <div>
@@ -87,7 +92,7 @@ export default function RequirementsPage() {
           <ExportButton
             data={{
               title: 'Requirements Pipeline Report',
-              sections: [{ heading: 'Requirements', rows: reqs.map(r => ({ 'Req ID': r.req_id, Title: r.title, Client: r.client, Stage: r.stage, Priority: r.priority, 'Days in Stage': r.days_in_stage, 'Role Type': r.role_type, Stalled: r.stalled ? 'Yes' : 'No' })) }],
+              sections: [{ heading: 'Requirements', rows: reqs.map(r => ({ 'Req ID': r.req_id, Title: r.title, Client: r.client, Stage: r.stage, Priority: r.priority, 'Days in Stage': r.days_in_stage, 'Role Type': r.role_type, 'Bill Rate': fmtRate(r.bill_rate), 'Pay Rate': fmtRate(r.pay_rate), 'Margin %': parseFloat(r.bill_rate) > 0 ? `${calcMargin(r.bill_rate, r.pay_rate)}%` : '—', Stalled: r.stalled ? 'Yes' : 'No' })) }],
             }}
             filename="requirements-report"
           />
@@ -100,7 +105,7 @@ export default function RequirementsPage() {
       </div>
 
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 20 }}>
         {[
           { label: 'Open Reqs', value: totalOpen, color: 'var(--accent-blue)' },
           { label: 'HIGH Priority', value: highCount, color: 'var(--red)' },
@@ -112,6 +117,10 @@ export default function RequirementsPage() {
             <div style={{ fontSize: 24, fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
           </div>
         ))}
+        <div className="card" style={{ padding: '12px 16px', borderLeft: `3px solid ${marginColor(avgMargin)}` }}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 4 }}>Avg Margin</div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: marginColor(avgMargin) }}>{avgMargin !== null ? `${avgMargin}%` : '—'}</div>
+        </div>
       </div>
 
       {/* Search + filter bar */}
@@ -167,6 +176,15 @@ export default function RequirementsPage() {
                     {req.days_in_stage > 0 && (
                       <div style={{ fontSize: 10, color: req.stalled ? 'var(--red)' : 'var(--text-muted)', marginTop: 4 }}>⏱ {req.days_in_stage}d in stage</div>
                     )}
+                    {parseFloat(req.bill_rate) > 0 && (() => {
+                      const pct = calcMargin(req.bill_rate, req.pay_rate);
+                      return (
+                        <div style={{ marginTop: 5, padding: '3px 6px', borderRadius: 4, background: `${marginColor(pct)}22`, border: `1px solid ${marginColor(pct)}55`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>Margin</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: marginColor(pct) }}>{pct}%</span>
+                        </div>
+                      );
+                    })()}
                     <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
                       <span className={`tag ${req.priority === 'HIGH' ? 'tag-red' : req.priority === 'MED' ? 'tag-amber' : 'tag-gray'}`} style={{ fontSize: 9 }}>{req.priority}</span>
                       <span className="tag tag-gray" style={{ fontSize: 9 }}>{req.role_type}</span>
@@ -197,7 +215,7 @@ export default function RequirementsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-card2)' }}>
-                {['Req ID', 'Title', 'Client', 'Stage', 'Priority', 'Days', 'Role Type', ''].map(h => (
+                {['Req ID', 'Title', 'Client', 'Stage', 'Priority', 'Days', 'Role Type', 'Bill Rate', 'Pay Rate', 'Margin', ''].map(h => (
                   <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.8, textTransform: 'uppercase' }}>{h}</th>
                 ))}
               </tr>
@@ -214,6 +232,14 @@ export default function RequirementsPage() {
                   <td style={{ padding: '10px 14px' }}><span style={{ color: priorityColors[req.priority], fontWeight: 700 }}>{req.priority}</span></td>
                   <td style={{ padding: '10px 14px', color: req.days_in_stage > 3 ? 'var(--amber)' : 'var(--text-muted)' }}>{req.days_in_stage}d</td>
                   <td style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>{req.role_type}</td>
+                  <td style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontWeight: 500 }}>{fmtRate(req.bill_rate)}</td>
+                  <td style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontWeight: 500 }}>{fmtRate(req.pay_rate)}</td>
+                  <td style={{ padding: '10px 14px' }}>
+                    {parseFloat(req.bill_rate) > 0 ? (() => {
+                      const pct = calcMargin(req.bill_rate, req.pay_rate);
+                      return <span style={{ fontWeight: 700, color: marginColor(pct) }}>{pct}%</span>;
+                    })() : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  </td>
                   <td style={{ padding: '10px 14px' }}>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button onClick={() => openEdit(req)} className="btn btn-ghost btn-sm" style={{ padding: '3px 9px' }}>Edit</button>
@@ -233,7 +259,7 @@ export default function RequirementsPage() {
       {showSend && (
         <SendReportModal
           reportType="Requirements Pipeline"
-          data={{ title: 'Requirements Pipeline Report', sections: [{ heading: 'Requirements', rows: reqs.map(r => ({ 'Req ID': r.req_id, Title: r.title, Client: r.client, Stage: r.stage, Priority: r.priority, 'Days in Stage': r.days_in_stage })) }] }}
+          data={{ title: 'Requirements Pipeline Report', sections: [{ heading: 'Requirements', rows: reqs.map(r => ({ 'Req ID': r.req_id, Title: r.title, Client: r.client, Stage: r.stage, Priority: r.priority, 'Days in Stage': r.days_in_stage, 'Bill Rate': fmtRate(r.bill_rate), 'Pay Rate': fmtRate(r.pay_rate), 'Margin %': parseFloat(r.bill_rate) > 0 ? `${calcMargin(r.bill_rate, r.pay_rate)}%` : '—' })) }] }}
           onClose={() => setShowSend(false)}
         />
       )}
@@ -253,6 +279,25 @@ export default function RequirementsPage() {
             <Field label="Stage"><Select value={form.stage} onChange={set('stage')} options={STAGES} /></Field>
             <Field label="Days in Stage"><Input type="number" value={form.days_in_stage} onChange={set('days_in_stage')} /></Field>
           </Row>
+          <Row>
+            <Field label="Bill Rate / Mo ($)" hint="What the client is billed monthly">
+              <Input type="number" value={form.bill_rate} onChange={set('bill_rate')} placeholder="e.g. 16000" />
+            </Field>
+            <Field label="Pay Rate / Mo ($)" hint="Expected engineer cost monthly">
+              <Input type="number" value={form.pay_rate} onChange={set('pay_rate')} placeholder="e.g. 9500" />
+            </Field>
+          </Row>
+          {parseFloat(form.bill_rate) > 0 && (
+            <div style={{ padding: '8px 12px', borderRadius: 6, background: `${marginColor(calcMargin(form.bill_rate, form.pay_rate))}15`, border: `1px solid ${marginColor(calcMargin(form.bill_rate, form.pay_rate))}40`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Estimated Margin</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: marginColor(calcMargin(form.bill_rate, form.pay_rate)) }}>
+                {calcMargin(form.bill_rate, form.pay_rate)}%
+                <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 8, color: 'var(--text-muted)' }}>
+                  (${(parseFloat(form.bill_rate) - parseFloat(form.pay_rate || 0)).toLocaleString()}/mo)
+                </span>
+              </span>
+            </div>
+          )}
           <Toggle label="Mark as Stalled" value={form.stalled} onChange={set('stalled')} />
         </AdminModal>
       )}

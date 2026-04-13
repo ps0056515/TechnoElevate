@@ -189,6 +189,28 @@ router.put('/health/:id', async (req, res) => {
   }
 });
 
+// ─── MARGINS ──────────────────────────────────────────────────────────────────
+
+// Summary endpoint: per-requirement margin with computed margin_pct
+router.get('/margins', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        id, req_id, title, client, stage, priority, role_type,
+        bill_rate, pay_rate,
+        CASE WHEN bill_rate > 0
+          THEN ROUND(((bill_rate - pay_rate) / bill_rate) * 100, 1)
+          ELSE 0
+        END AS margin_pct,
+        (bill_rate - pay_rate) AS margin_abs
+      FROM requirements
+      WHERE bill_rate > 0
+      ORDER BY margin_pct DESC
+    `);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─── LEADS ────────────────────────────────────────────────────────────────────
 
 router.get('/leads', async (req, res) => {
@@ -240,14 +262,14 @@ router.get('/admin/talent', async (req, res) => {
 
 router.post('/admin/talent', async (req, res) => {
   try {
-    const { name, role, status, bench_start_date, idle_hours, current_client, skills } = req.body;
+    const { name, role, status, bench_start_date, idle_hours, current_client, skills, pay_rate } = req.body;
     const skillsArr = typeof skills === 'string'
       ? skills.split(',').map(s => s.trim()).filter(Boolean)
       : (skills || []);
     const result = await pool.query(
-      `INSERT INTO talent (name, role, status, bench_start_date, idle_hours, current_client, skills)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [name, role, status || 'bench', bench_start_date || null, idle_hours || 0, current_client || null, skillsArr]
+      `INSERT INTO talent (name, role, status, bench_start_date, idle_hours, current_client, skills, pay_rate)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [name, role, status || 'bench', bench_start_date || null, idle_hours || 0, current_client || null, skillsArr, pay_rate || 0]
     );
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -255,13 +277,13 @@ router.post('/admin/talent', async (req, res) => {
 
 router.put('/admin/talent/:id', async (req, res) => {
   try {
-    const { name, role, status, bench_start_date, idle_hours, current_client, skills } = req.body;
+    const { name, role, status, bench_start_date, idle_hours, current_client, skills, pay_rate } = req.body;
     const skillsArr = typeof skills === 'string'
       ? skills.split(',').map(s => s.trim()).filter(Boolean)
       : (skills || []);
     await pool.query(
-      `UPDATE talent SET name=$1, role=$2, status=$3, bench_start_date=$4, idle_hours=$5, current_client=$6, skills=$7 WHERE id=$8`,
-      [name, role, status, bench_start_date || null, idle_hours || 0, current_client || null, skillsArr, req.params.id]
+      `UPDATE talent SET name=$1, role=$2, status=$3, bench_start_date=$4, idle_hours=$5, current_client=$6, skills=$7, pay_rate=$8 WHERE id=$9`,
+      [name, role, status, bench_start_date || null, idle_hours || 0, current_client || null, skillsArr, pay_rate || 0, req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -284,7 +306,7 @@ router.get('/admin/requirements', async (req, res) => {
 
 router.post('/admin/requirements', async (req, res) => {
   try {
-    const { req_id, title, client, stage, days_in_stage, stalled, priority, role_type } = req.body;
+    const { req_id, title, client, stage, days_in_stage, stalled, priority, role_type, bill_rate, pay_rate } = req.body;
     // Auto-generate req_id if not supplied
     let finalReqId = req_id && req_id.trim() ? req_id.trim() : null;
     if (!finalReqId) {
@@ -294,9 +316,9 @@ router.post('/admin/requirements', async (req, res) => {
       finalReqId = `REQ-${year}-${String(next).padStart(3, '0')}`;
     }
     const result = await pool.query(
-      `INSERT INTO requirements (req_id, title, client, stage, days_in_stage, stalled, priority, role_type)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [finalReqId, title, client, stage || 'intake', days_in_stage || 0, stalled || false, priority || 'MED', role_type || '']
+      `INSERT INTO requirements (req_id, title, client, stage, days_in_stage, stalled, priority, role_type, bill_rate, pay_rate)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [finalReqId, title, client, stage || 'intake', days_in_stage || 0, stalled || false, priority || 'MED', role_type || '', bill_rate || 0, pay_rate || 0]
     );
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -304,10 +326,10 @@ router.post('/admin/requirements', async (req, res) => {
 
 router.put('/admin/requirements/:id', async (req, res) => {
   try {
-    const { req_id, title, client, stage, days_in_stage, stalled, priority, role_type } = req.body;
+    const { req_id, title, client, stage, days_in_stage, stalled, priority, role_type, bill_rate, pay_rate } = req.body;
     await pool.query(
-      `UPDATE requirements SET req_id=$1, title=$2, client=$3, stage=$4, days_in_stage=$5, stalled=$6, priority=$7, role_type=$8 WHERE id=$9`,
-      [req_id, title, client, stage, days_in_stage || 0, stalled || false, priority, role_type, req.params.id]
+      `UPDATE requirements SET req_id=$1, title=$2, client=$3, stage=$4, days_in_stage=$5, stalled=$6, priority=$7, role_type=$8, bill_rate=$9, pay_rate=$10 WHERE id=$11`,
+      [req_id, title, client, stage, days_in_stage || 0, stalled || false, priority, role_type, bill_rate || 0, pay_rate || 0, req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }

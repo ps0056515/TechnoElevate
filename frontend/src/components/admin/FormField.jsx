@@ -11,11 +11,12 @@ const inputStyle = {
   fontSize: 13, fontFamily: 'var(--font)', outline: 'none', transition: 'border-color 0.15s',
 };
 
-export function Field({ label, required, children }) {
+export function Field({ label, required, hint, children }) {
   return (
     <div style={{ marginBottom: 14 }}>
       <label style={labelStyle}>{label}{required && <span style={{ color: 'var(--red)' }}> *</span>}</label>
       {children}
+      {hint && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>{hint}</div>}
     </div>
   );
 }
