@@ -31,15 +31,21 @@ export default function LoginPage({ onLogin }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.toLowerCase().trim(), password }),
       });
-      const data = await res.json();
+      const raw = await res.text();
+      let data = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        /* non-JSON body (e.g. proxy HTML error page) */
+      }
       if (!res.ok) {
-        setError(data.error || 'Invalid email or password');
+        setError(data.error || `Request failed (${res.status}). Check that the API on port 6000 is running and the database is set up.`);
       } else {
         setToken(data.token);
         onLogin(data.user);
       }
     } catch {
-      setError('Could not reach the server. Is the backend running?');
+      setError('Could not reach the server. Is the backend running on port 6000?');
     }
     setLoading(false);
   };

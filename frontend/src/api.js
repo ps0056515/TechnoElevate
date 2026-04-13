@@ -1,21 +1,35 @@
 const TOKEN_KEY = 'te_token';
 
-/** Backend origin for API calls when the SPA is not served with Vite’s /api proxy (e.g. remote static host). Set in .env: VITE_API_URL=http://host:6000 */
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+/**
+ * API origin:
+ * - `VITE_API_URL` in `.env` (recommended for odd ports / HTTPS) — see `frontend/.env.example`
+ * - Dev (`vite`): empty → relative `/api` so the Vite proxy can forward to the backend
+ * - Production build without env: same host as the page, port **6000** (matches backend default)
+ */
+function resolveApiBase() {
+  const fromEnv = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+  if (fromEnv) return fromEnv;
+  if (import.meta.env.DEV) return '';
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    return `${window.location.protocol}//${window.location.hostname}:6000`;
+  }
+  return '';
+}
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
 /**
- * Resolves a path like `/api/...` to a full URL when `VITE_API_URL` is set; otherwise keeps relative URLs for local dev.
+ * Resolves a path like `/api/...` to a full URL for production; relative in Vite dev (proxy).
  */
 export function apiUrl(path) {
   if (!path) return path;
   if (/^https?:\/\//i.test(path)) return path;
   const p = path.startsWith('/') ? path : `/${path}`;
-  if (!API_BASE) return p;
-  return `${API_BASE}${p}`;
+  const base = resolveApiBase();
+  if (!base) return p;
+  return `${base}${p}`;
 }
 
 export async function apiFetch(path, options = {}) {

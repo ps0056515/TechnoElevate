@@ -10,12 +10,15 @@ const PORT = process.env.PORT || 6000;
 
 const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:7000')
   .split(',')
-  .map(o => o.trim());
+  .map(o => o.trim())
+  .filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
+    // Non-browser clients (curl, server-to-server) send no Origin
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS: origin ${origin} not allowed`));
+    console.warn(`CORS: blocked origin "${origin}". Add it to FRONTEND_URL (comma-separated).`);
+    return callback(null, false);
   },
   credentials: true,
 }));
