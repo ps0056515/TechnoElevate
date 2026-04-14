@@ -28,9 +28,12 @@ export default function RequirementsPage() {
   const [showSend, setShowSend] = useState(false);
   const [availableTalent, setAvailableTalent] = useState([]);
   const [contracts, setContracts] = useState([]);
-  const [assignTarget, setAssignTarget] = useState(null);   // req being assigned
+  const [assignTarget, setAssignTarget] = useState(null);
   const [assignTalentId, setAssignTalentId] = useState('');
-  const [closureNotice, setClosureNotice] = useState(null);  // {reqId, talentName}
+  const [closureNotice, setClosureNotice] = useState(null);
+  const [matchTarget, setMatchTarget] = useState(null);      // req being AI-matched
+  const [matchResults, setMatchResults] = useState(null);    // { matches: [...] }
+  const [matchLoading, setMatchLoading] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -102,6 +105,28 @@ export default function RequirementsPage() {
     apiFetch('/api/talent/available').then(r => r.json()).then(setAvailableTalent).catch(() => {});
   };
 
+  const openMatch = async (req) => {
+    setMatchTarget(req);
+    setMatchResults(null);
+    setMatchLoading(true);
+    try {
+      const res = await apiFetch(`/api/requirements/${req.id}/match-talent`);
+      const data = await res.json();
+      setMatchResults(data);
+    } catch { setMatchResults({ error: 'Failed to get matches' }); }
+    setMatchLoading(false);
+  };
+
+  const assignFromMatch = async (reqId, talentId) => {
+    await apiFetch(`/api/pipeline/${reqId}/assign`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ talent_id: talentId }),
+    });
+    setMatchTarget(null); setMatchResults(null);
+    load();
+    apiFetch('/api/talent/available').then(r => r.json()).then(setAvailableTalent).catch(() => {});
+  };
+
   const rejectReq = async (req) => {
     const reason = prompt(`Rejection reason for "${req.title}":\n(e.g. "Budget freeze", "Role cancelled")`);
     if (reason === null) return;
@@ -133,7 +158,10 @@ export default function RequirementsPage() {
       {/* Page header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Requirements</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center' }}>
+            Requirements
+            <AiBadge />
+          </h2>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0' }}>Manage and track all open requirements through the pipeline</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -258,7 +286,20 @@ export default function RequirementsPage() {
                         ↩ {req.rejection_reason}
                       </div>
                     )}
-                    <div style={{ display: 'flex', gap: 4, marginTop: 7, flexWrap: 'wrap' }}>
+                    {/* AI Match button — only show if no talent assigned */}
+                    {!req.assigned_talent_name && (
+                      <button onClick={() => openMatch(req)} style={{
+                        marginTop: 6, width: '100%', padding: '4px 0',
+                        background: 'linear-gradient(135deg, rgba(165,94,234,0.08), rgba(79,124,255,0.08))',
+                        border: '1px solid rgba(165,94,234,0.35)',
+                        borderRadius: 4, fontSize: 10, color: 'var(--purple)', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                      }}>
+                        🤖 Match Talent
+                        <span style={{ fontSize: 8, fontWeight: 800, color: 'var(--purple)', background: 'rgba(165,94,234,0.18)', border: '1px solid rgba(165,94,234,0.35)', borderRadius: 3, padding: '1px 4px', letterSpacing: 0.5 }}>AI</span>
+                      </button>
+                    )}
+                    <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
                       <button onClick={() => openEdit(req)} style={{ flex: 1, padding: '3px 0', background: 'transparent', border: '1px solid var(--border-light)', borderRadius: 4, fontSize: 10, color: 'var(--text-muted)', cursor: 'pointer' }}
                         onMouseEnter={e => { e.target.style.background = 'var(--bg-hover)'; e.target.style.color = 'var(--text-primary)'; }}
                         onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = 'var(--text-muted)'; }}>
@@ -468,6 +509,76 @@ export default function RequirementsPage() {
           <Toggle label="Mark as Stalled" value={form.stalled} onChange={set('stalled')} />
         </AdminModal>
       )}
+
+      {/* ── AI Match Talent Modal ─────────────────────────────────────────── */}
+      {matchTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 12, padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', overflowY: 'auto', border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <span style={{ fontSize: 20 }}>🤖</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>AI Talent Match</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{matchTarget.req_id} · {matchTarget.title} · {matchTarget.client}</div>
+              </div>
+              <button onClick={() => { setMatchTarget(null); setMatchResults(null); }} style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: 20, color: 'var(--text-muted)', cursor: 'pointer' }}>×</button>
+            </div>
+
+            {matchLoading && (
+              <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)' }}>
+                <div className="spinner" style={{ marginBottom: 12 }} />
+                Analysing bench talent with GPT-4o…
+              </div>
+            )}
+
+            {matchResults?.error && (
+              <div style={{ color: 'var(--red)', padding: 16, textAlign: 'center' }}>{matchResults.error}</div>
+            )}
+
+            {matchResults?.message && !matchResults?.matches?.length && (
+              <div style={{ color: 'var(--text-muted)', padding: 16, textAlign: 'center' }}>{matchResults.message}</div>
+            )}
+
+            {matchResults?.matches?.map((m, i) => (
+              <div key={m.talent_id} style={{
+                border: `1px solid ${i === 0 ? 'var(--green)' : 'var(--border)'}`,
+                borderRadius: 8, padding: '12px 14px', marginBottom: 10,
+                background: i === 0 ? 'rgba(46,213,115,0.04)' : 'var(--bg-card2)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  {i === 0 && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)', background: 'var(--green-dim)', padding: '2px 6px', borderRadius: 4 }}>⭐ BEST MATCH</span>}
+                  <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{m.name}</span>
+                  <span style={{ marginLeft: 'auto', fontWeight: 800, fontSize: 16, color: m.match_score >= 70 ? 'var(--green)' : m.match_score >= 45 ? 'var(--amber)' : 'var(--red)' }}>
+                    {m.match_score}%
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>{m.match_reason}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: m.gap ? 6 : 0 }}>
+                  {m.skill_overlap?.map(s => (
+                    <span key={s} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 3, background: 'rgba(79,124,255,0.1)', color: 'var(--accent-blue)', border: '1px solid rgba(79,124,255,0.2)' }}>{s}</span>
+                  ))}
+                </div>
+                {m.gap && <div style={{ fontSize: 11, color: 'var(--amber)', marginTop: 4 }}>⚠ Gap: {m.gap}</div>}
+                <button
+                  onClick={() => assignFromMatch(matchTarget.id, m.talent_id)}
+                  style={{ marginTop: 10, padding: '5px 14px', background: 'var(--accent-blue)', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  Assign {m.name} →
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function AiBadge() {
+  return (
+    <span style={{
+      fontSize: 9, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase',
+      background: 'linear-gradient(135deg, rgba(165,94,234,0.15), rgba(79,124,255,0.15))',
+      color: 'var(--purple)', border: '1px solid rgba(165,94,234,0.4)',
+      borderRadius: 4, padding: '2px 6px', marginLeft: 7, verticalAlign: 'middle',
+    }}>✦ AI</span>
   );
 }

@@ -798,6 +798,282 @@ Return ONLY valid JSON, no extra text.`
   }
 });
 
+// ─── AI HELPERS ───────────────────────────────────────────────────────────────
+function getOpenAI() {
+  if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.startsWith('sk-your')) {
+    throw new Error('OPENAI_API_KEY is not configured. Please add it to backend/.env');
+  }
+  const { OpenAI } = require('openai');
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
+async function aiChat(messages, jsonMode = true) {
+  const openai = getOpenAI();
+  const res = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
+    messages,
+  });
+  const content = res.choices[0].message.content;
+  return jsonMode ? JSON.parse(content) : content;
+}
+
+// ─── AI 1: Resume / CV Parser ─────────────────────────────────────────────────
+// POST /api/talent/parse-resume  (multipart: field "resume")
+const resumeStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, '..', 'uploads', 'resumes');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${Date.now()}_${safe}`);
+  },
+});
+const uploadResume = multer({ storage: resumeStorage, limits: { fileSize: 10 * 1024 * 1024 } });
+
+router.post('/talent/parse-resume', uploadResume.single('resume'), async (req, res) => {
+  const filePath = req.file?.path;
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    let text = '';
+    if (req.file.originalname.toLowerCase().endsWith('.pdf')) {
+      const pdfParse = require('pdf-parse');
+      text = (await pdfParse(fs.readFileSync(filePath))).text.slice(0, 14000);
+    } else {
+      text = fs.readFileSync(filePath, 'utf8').slice(0, 14000);
+    }
+
+    const result = await aiChat([
+      {
+        role: 'system',
+        content: `You are an expert HR data extractor. Given a resume/CV, extract structured data and return a JSON object with these exact fields:
+- name: full name (string)
+- role: job title / primary role (string, e.g. "React Developer", "DevOps Engineer")
+- skills: array of technical skills, max 10 (array of strings)
+- pay_rate: estimated monthly market rate in USD as a number — base on experience and role (number, e.g. 9500)
+- experience_years: years of experience as a number (number)
+- summary: 1–2 sentence professional summary (string)
+- current_employer: current or most recent employer (string or null)
+Return ONLY valid JSON, no extra text.`,
+      },
+      { role: 'user', content: `Resume text:\n\n${text}` },
+    ]);
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  }
+});
+
+// ─── AI 2: Requirement → Talent Matcher ───────────────────────────────────────
+// GET /api/requirements/:id/match-talent
+router.get('/requirements/:id/match-talent', async (req, res) => {
+  try {
+    const { rows: [req_row] } = await pool.query('SELECT * FROM requirements WHERE id=$1', [req.params.id]);
+    if (!req_row) return res.status(404).json({ error: 'Requirement not found' });
+
+    const { rows: talent } = await pool.query(
+      `SELECT id, name, role, skills, pay_rate, idle_hours, bench_start_date
+       FROM talent WHERE status IN ('bench','in_process') ORDER BY idle_hours DESC`
+    );
+
+    if (!talent.length) return res.json({ matches: [], message: 'No available talent on bench' });
+
+    const talentList = talent.map(t => ({
+      id: t.id,
+      name: t.name,
+      role: t.role,
+      skills: Array.isArray(t.skills) ? t.skills : [],
+      pay_rate: t.pay_rate,
+      idle_hours: t.idle_hours,
+    }));
+
+    const result = await aiChat([
+      {
+        role: 'system',
+        content: `You are a talent matching specialist. Given a job requirement and a list of available engineers, rank the top 5 best matches.
+Return a JSON object with key "matches" — an array of up to 5 objects, each with:
+- talent_id: the id of the matched engineer (number)
+- name: engineer name (string)
+- match_score: match quality 0–100 (number)
+- match_reason: 1-sentence explanation of why this person fits (string)
+- skill_overlap: array of matching skills (array of strings)
+- gap: any notable skill gap (string or null)
+Order by match_score descending.`,
+      },
+      {
+        role: 'user',
+        content: `Requirement: "${req_row.title}" | Client: ${req_row.client} | Role type: ${req_row.role_type} | Bill rate: $${req_row.bill_rate}/mo\n\nAvailable talent:\n${JSON.stringify(talentList, null, 2)}`,
+      },
+    ]);
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── AI 3: Email Draft Generator ─────────────────────────────────────────────
+// POST /api/ai/draft-email   body: { context_type, entity_id, entity_name, issue, recipient_name }
+router.post('/ai/draft-email', async (req, res) => {
+  try {
+    const { context_type, entity_name, issue, recipient_name, extra } = req.body;
+
+    const contextMap = {
+      requirement:  'a staffing requirement that has stalled with no candidate submissions',
+      contract:     'an expiring Statement of Work / contract that needs renewal',
+      invoice:      'an overdue invoice that requires payment follow-up',
+      talent:       'an engineer who has been on the bench idle for too long',
+      lead:         'a sales lead that needs a follow-up to move the deal forward',
+    };
+
+    const text = await aiChat([
+      {
+        role: 'system',
+        content: `You are a professional business communications writer for TechnoElevate, a technology staffing and consulting firm.
+Write concise, professional business emails. Output JSON with:
+- subject: email subject line (string)
+- body: full email body with greeting, context, ask, and sign-off (string, use \\n for line breaks)
+- tone: the tone used — one of [professional, urgent, friendly] (string)`,
+      },
+      {
+        role: 'user',
+        content: `Write an email about: ${contextMap[context_type] || issue}
+Entity: ${entity_name}
+Recipient: ${recipient_name || 'the client/team'}
+Additional context: ${extra || issue || 'N/A'}
+Sign-off name: TechnoElevate Operations Team`,
+      },
+    ]);
+
+    res.json(text);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── AI 4: Project Risk Predictor ────────────────────────────────────────────
+// POST /api/ai/risk-check   body: { project_id } — or leave blank to check all active projects
+router.post('/ai/risk-check', async (req, res) => {
+  try {
+    const filter = req.body?.project_id ? 'AND p.id=$1' : '';
+    const params = req.body?.project_id ? [req.body.project_id] : [];
+
+    const { rows: projects } = await pool.query(`
+      SELECT p.*,
+        (SELECT COUNT(*) FROM project_milestones WHERE project_id=p.id) AS total_milestones,
+        (SELECT COUNT(*) FROM project_milestones WHERE project_id=p.id AND completed=true) AS done_milestones,
+        (SELECT COUNT(*) FROM project_talent WHERE project_id=p.id) AS actual_team_size
+      FROM projects p
+      WHERE p.stage NOT IN ('completed') ${filter}
+      ORDER BY p.start_date
+    `, params);
+
+    if (!projects.length) return res.json({ risks: [] });
+
+    const result = await aiChat([
+      {
+        role: 'system',
+        content: `You are a project risk analyst for a technology consulting firm. Analyse active projects and flag risks.
+Return JSON with key "risks" — an array of objects, one per project that has a meaningful risk, each with:
+- project_id: id (number)
+- project_name: name (string)
+- risk_level: "HIGH", "MED", or "LOW" (string)
+- risk_summary: 1-sentence summary of the primary risk (string)
+- signals: array of specific risk signals detected (array of strings)
+- recommendation: specific action to mitigate risk (string)
+Only include projects with MED or HIGH risk. Skip healthy projects.`,
+      },
+      {
+        role: 'user',
+        content: `Active projects:\n${JSON.stringify(projects.map(p => ({
+          id: p.id, name: p.name, client: p.client, stage: p.stage, phase: p.phase,
+          utilization: p.utilization_pct, team_size: p.team_size,
+          actual_team_size: parseInt(p.actual_team_size),
+          budget: p.budget, actual_spend: p.actual_spend,
+          milestones: `${p.done_milestones}/${p.total_milestones} done`,
+          blocking_issue: p.blocking_issue,
+          start_date: p.start_date, end_date: p.end_date,
+        })), null, 2)}`,
+      },
+    ]);
+
+    // Update project stages automatically for HIGH risk projects
+    for (const risk of (result.risks || [])) {
+      if (risk.risk_level === 'HIGH') {
+        await pool.query(
+          `UPDATE projects SET stage='at_risk' WHERE id=$1 AND stage='green'`,
+          [risk.project_id]
+        );
+        // Add attention issue
+        await pool.query(`
+          INSERT INTO attention_issues
+            (priority, entity_name, entity_type, entity_id, issue_description, action_label)
+          VALUES ('HIGH',$1,'project',$2,$3,'Review Project')
+          ON CONFLICT DO NOTHING
+        `, [risk.project_name, String(risk.project_id), risk.risk_summary]);
+      }
+    }
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── AI 5: Proposal / SOW Draft Writer ───────────────────────────────────────
+// POST /api/leads/:id/draft-proposal
+router.post('/leads/:id/draft-proposal', async (req, res) => {
+  try {
+    const { rows: [lead] } = await pool.query('SELECT * FROM leads WHERE id=$1', [req.params.id]);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    // Fetch linked requirements for scope context
+    const { rows: reqs } = await pool.query(
+      'SELECT title, role_type, bill_rate FROM requirements WHERE lead_id=$1',
+      [lead.id]
+    );
+
+    const result = await aiChat([
+      {
+        role: 'system',
+        content: `You are a senior proposal writer at TechnoElevate, a technology staffing and consulting firm.
+Write a professional Statement of Work (SOW) / proposal outline. Return JSON with:
+- title: proposal title (string)
+- executive_summary: 2-3 sentences positioning TechnoElevate's value (string)
+- scope_of_work: array of 3-5 scope items — each a string describing a deliverable (array)
+- engagement_model: proposed engagement model e.g. T&M / Fixed Price / Retainer (string)
+- team_composition: array of proposed roles with count e.g. ["2x React Developer", "1x DevOps Engineer"] (array)
+- timeline: proposed timeline e.g. "12 weeks / 3 months" (string)
+- estimated_value: estimated contract value as a formatted string e.g. "$280,000" (string)
+- terms: array of 3 key commercial terms (array)
+- next_steps: array of 3 recommended next steps to close the deal (array)`,
+      },
+      {
+        role: 'user',
+        content: `Lead details:
+Company: ${lead.company_name}
+Contact: ${lead.contact_name || 'N/A'}
+Estimated deal value: $${lead.estimated_value || 0}
+Status: ${lead.status}
+Notes: ${lead.notes || 'N/A'}
+
+Linked requirements:
+${reqs.length ? reqs.map(r => `- ${r.title} (${r.role_type}) @ $${r.bill_rate}/mo`).join('\n') : 'No requirements linked yet'}`,
+      },
+    ]);
+
+    res.json({ ...result, lead_id: lead.id, company: lead.company_name, generated_at: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── INVOICES ─────────────────────────────────────────────────────────────────
 router.get('/admin/invoices', async (req, res) => {
   try {

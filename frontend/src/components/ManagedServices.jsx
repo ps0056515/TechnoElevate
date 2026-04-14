@@ -35,6 +35,8 @@ export default function ManagedServices({ compact }) {
   const [availTalent, setAvailTalent] = useState([]);
   const [newMilestone, setNewMilestone] = useState({});
   const [addingTeam, setAddingTeam] = useState({});
+  const [riskResults, setRiskResults] = useState(null);
+  const [riskLoading, setRiskLoading] = useState(false);
 
   const load = () => {
     apiFetch('/api/projects')
@@ -101,6 +103,18 @@ export default function ManagedServices({ compact }) {
     load();
   };
 
+  const runRiskCheck = async () => {
+    setRiskLoading(true);
+    setRiskResults(null);
+    try {
+      const res = await apiFetch('/api/ai/risk-check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      const data = await res.json();
+      if (data.error) { alert('AI Error: ' + data.error); }
+      else { setRiskResults(data.risks || []); load(); }
+    } catch { alert('Risk check failed'); }
+    setRiskLoading(false);
+  };
+
   const filtered = filter === 'all' ? projects : projects.filter(p => p.stage === filter);
   const display = compact ? filtered.slice(0, 4) : filtered;
 
@@ -111,9 +125,18 @@ export default function ManagedServices({ compact }) {
   return (
     <div className="card" style={{ padding: '16px 20px' }}>
       <div className="section-header">
-        <span className="section-title">Managed Services Delivery</span>
+        <span className="section-title" style={{ display: 'flex', alignItems: 'center' }}>
+          Managed Services Delivery
+          <AiBadge />
+        </span>
         {!compact && (
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button onClick={runRiskCheck} className="btn btn-sm btn-ghost"
+              title="AI analyses all active projects for risk signals"
+              style={{ borderColor: 'rgba(165,94,234,0.4)', color: 'var(--purple)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              {riskLoading ? '⏳ Checking…' : '🤖 Risk Check'}
+              {!riskLoading && <span style={{ fontSize: 8, fontWeight: 800, color: 'var(--purple)', background: 'rgba(165,94,234,0.15)', border: '1px solid rgba(165,94,234,0.35)', borderRadius: 3, padding: '1px 4px', letterSpacing: 0.5 }}>AI</span>}
+            </button>
             {['all', 'blocked', 'at_risk', 'green', 'completed'].map(f => (
               <button key={f} onClick={() => setFilter(f)} className={`btn btn-sm ${filter === f ? 'btn-primary' : 'btn-ghost'}`}>
                 {f === 'all' ? 'All' : stageConfig[f]?.label || f}
@@ -122,6 +145,37 @@ export default function ManagedServices({ compact }) {
           </div>
         )}
       </div>
+
+      {/* AI Risk Results Panel */}
+      {riskResults && (
+        <div style={{ marginBottom: 14, border: '1px solid rgba(165,94,234,0.3)', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ padding: '8px 14px', background: 'rgba(165,94,234,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--purple)' }}>🤖 AI Risk Analysis Results</span>
+            <button onClick={() => setRiskResults(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16 }}>×</button>
+          </div>
+          {riskResults.length === 0 ? (
+            <div style={{ padding: '12px 14px', fontSize: 13, color: 'var(--green)' }}>✓ All active projects look healthy — no significant risks detected.</div>
+          ) : (
+            riskResults.map(r => (
+              <div key={r.project_id} style={{ padding: '12px 14px', borderTop: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>{r.project_name}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
+                    background: r.risk_level === 'HIGH' ? 'var(--red-dim)' : 'var(--amber-dim)',
+                    color: r.risk_level === 'HIGH' ? 'var(--red)' : 'var(--amber)' }}>
+                    {r.risk_level}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 5 }}>{r.risk_summary}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 5 }}>
+                  {r.signals?.map(s => <span key={s} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, background: 'var(--amber-dim)', color: 'var(--amber)', border: '1px solid rgba(255,165,2,0.2)' }}>⚠ {s}</span>)}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--accent-blue)' }}>→ {r.recommendation}</div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr 1fr' : 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
         {display.map(proj => {
@@ -266,5 +320,17 @@ export default function ManagedServices({ compact }) {
         </div>
       )}
     </div>
+  );
+}
+
+function AiBadge() {
+  return (
+    <span style={{
+      fontSize: 9, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase',
+      background: 'linear-gradient(135deg, rgba(165,94,234,0.15), rgba(79,124,255,0.15))',
+      color: 'var(--purple)', border: '1px solid rgba(165,94,234,0.4)',
+      borderRadius: 4, padding: '2px 6px', marginLeft: 7, verticalAlign: 'middle',
+      lineHeight: 1,
+    }}>✦ AI</span>
   );
 }

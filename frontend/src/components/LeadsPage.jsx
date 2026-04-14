@@ -44,7 +44,10 @@ export default function LeadsPage() {
   const [linkedReqs, setLinkedReqs] = useState([]);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState('all');
-  const [reqCounts, setReqCounts] = useState({});  // leadId → count
+  const [reqCounts, setReqCounts] = useState({});
+  const [proposalModal, setProposalModal] = useState(null);  // lead row
+  const [proposal, setProposal] = useState(null);
+  const [proposalLoading, setProposalLoading] = useState(false);
 
   const load = async () => {
     try {
@@ -140,6 +143,47 @@ export default function LeadsPage() {
     } catch (err) { console.error('Delete failed:', err); }
   };
 
+  const openProposal = async (lead) => {
+    setProposalModal(lead);
+    setProposal(null);
+    setProposalLoading(true);
+    try {
+      const res = await apiFetch(`/api/leads/${lead.id}/draft-proposal`, { method: 'POST' });
+      const data = await res.json();
+      if (data.error) { alert('AI Error: ' + data.error); setProposalModal(null); }
+      else setProposal(data);
+    } catch { alert('Failed to generate proposal'); setProposalModal(null); }
+    setProposalLoading(false);
+  };
+
+  const copyProposal = () => {
+    if (!proposal) return;
+    const text = [
+      `PROPOSAL: ${proposal.title}`,
+      `Company: ${proposal.company}`,
+      '',
+      'EXECUTIVE SUMMARY',
+      proposal.executive_summary,
+      '',
+      'SCOPE OF WORK',
+      ...(proposal.scope_of_work || []).map((s, i) => `${i + 1}. ${s}`),
+      '',
+      'TEAM COMPOSITION',
+      ...(proposal.team_composition || []).map(t => `• ${t}`),
+      '',
+      `ENGAGEMENT MODEL: ${proposal.engagement_model}`,
+      `TIMELINE: ${proposal.timeline}`,
+      `ESTIMATED VALUE: ${proposal.estimated_value}`,
+      '',
+      'KEY TERMS',
+      ...(proposal.terms || []).map(t => `• ${t}`),
+      '',
+      'NEXT STEPS',
+      ...(proposal.next_steps || []).map((s, i) => `${i + 1}. ${s}`),
+    ].join('\n');
+    navigator.clipboard.writeText(text).then(() => alert('Proposal copied to clipboard!'));
+  };
+
   const filtered = filter === 'all' ? rows : rows.filter(r => r.status === filter);
 
   const totalValue = rows.filter(r => r.status !== 'lost').reduce((s, r) => s + (parseFloat(r.estimated_value) || 0), 0);
@@ -192,6 +236,16 @@ export default function LeadsPage() {
                 + Req
               </button>
             )}
+            {['qualified', 'proposal_sent', 'negotiation', 'won'].includes(row.status) && (
+              <button
+                onClick={(e) => { e.stopPropagation(); openProposal(row); }}
+                style={{ background: 'linear-gradient(135deg, rgba(165,94,234,0.12), rgba(79,124,255,0.1))', color: 'var(--purple)', border: '1px solid rgba(165,94,234,0.35)', borderRadius: 10, padding: '2px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                title="AI-draft a proposal/SOW for this lead"
+              >
+                🤖 Proposal
+                <span style={{ fontSize: 8, fontWeight: 800, color: 'var(--purple)', background: 'rgba(165,94,234,0.18)', border: '1px solid rgba(165,94,234,0.3)', borderRadius: 3, padding: '1px 4px', letterSpacing: 0.5 }}>AI</span>
+              </button>
+            )}
           </div>
         );
       }
@@ -205,7 +259,10 @@ export default function LeadsPage() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Leads</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center' }}>
+            Leads
+            <AiBadge />
+          </h2>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0' }}>Track and manage your sales pipeline</p>
         </div>
         <button className="btn btn-primary" onClick={openAdd}>+ Add Lead</button>
@@ -371,6 +428,100 @@ export default function LeadsPage() {
           )}
         </AdminModal>
       )}
+
+      {/* ── AI Proposal Modal ──────────────────────────────────────────────── */}
+      {proposalModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 12, padding: 24, width: '100%', maxWidth: 620, maxHeight: '85vh', overflowY: 'auto', border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+              <span style={{ fontSize: 22 }}>📋</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>AI Proposal Draft</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{proposalModal.company_name} · ${parseFloat(proposalModal.estimated_value || 0).toLocaleString('en-US')}</div>
+              </div>
+              <button onClick={() => { setProposalModal(null); setProposal(null); }} style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: 22, color: 'var(--text-muted)', cursor: 'pointer' }}>×</button>
+            </div>
+
+            {proposalLoading && (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                <div className="spinner" style={{ marginBottom: 14 }} />
+                Drafting proposal with GPT-4o…
+              </div>
+            )}
+
+            {proposal && (
+              <div>
+                <h3 style={{ margin: '0 0 8px', fontSize: 16, color: 'var(--accent-blue)' }}>{proposal.title}</h3>
+
+                <Section label="Executive Summary" content={proposal.executive_summary} />
+
+                <ListSection label="Scope of Work" items={proposal.scope_of_work} numbered />
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                  <InfoBox label="Engagement Model" value={proposal.engagement_model} />
+                  <InfoBox label="Timeline" value={proposal.timeline} />
+                  <InfoBox label="Estimated Value" value={proposal.estimated_value} color="var(--green)" />
+                </div>
+
+                <ListSection label="Team Composition" items={proposal.team_composition} />
+                <ListSection label="Key Terms" items={proposal.terms} />
+                <ListSection label="Next Steps" items={proposal.next_steps} numbered />
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                  <button className="btn btn-primary" onClick={copyProposal}>📋 Copy to Clipboard</button>
+                  <button className="btn btn-ghost" onClick={() => openProposal(proposalModal)}>🔄 Regenerate</button>
+                  <button className="btn btn-ghost" onClick={() => { setProposalModal(null); setProposal(null); }}>Close</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+// ── Helpers for proposal layout ────────────────────────────────────────────
+function Section({ label, content }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 5 }}>{label}</div>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, padding: '10px 12px', background: 'var(--bg-card2)', borderRadius: 6, border: '1px solid var(--border)' }}>{content}</div>
+    </div>
+  );
+}
+function ListSection({ label, items, numbered }) {
+  if (!items?.length) return null;
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 5 }}>{label}</div>
+      <div style={{ padding: '10px 14px', background: 'var(--bg-card2)', borderRadius: 6, border: '1px solid var(--border)' }}>
+        {items.map((item, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: i < items.length - 1 ? 6 : 0, fontSize: 13, color: 'var(--text-secondary)' }}>
+            <span style={{ color: 'var(--accent-blue)', fontWeight: 700, minWidth: 16 }}>{numbered ? `${i + 1}.` : '•'}</span>
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function InfoBox({ label, value, color }) {
+  return (
+    <div style={{ padding: '10px 12px', background: 'var(--bg-card2)', borderRadius: 6, border: '1px solid var(--border)' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: color || 'var(--text-primary)' }}>{value}</div>
+    </div>
+  );
+}
+
+function AiBadge() {
+  return (
+    <span style={{
+      fontSize: 9, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase',
+      background: 'linear-gradient(135deg, rgba(165,94,234,0.15), rgba(79,124,255,0.15))',
+      color: 'var(--purple)', border: '1px solid rgba(165,94,234,0.4)',
+      borderRadius: 4, padding: '2px 6px', marginLeft: 7, verticalAlign: 'middle',
+    }}>✦ AI</span>
   );
 }
