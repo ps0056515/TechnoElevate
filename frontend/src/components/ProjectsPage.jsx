@@ -23,10 +23,11 @@ export default function ProjectsPage() {
 
   // Load projects once for the Documents tab selector
   React.useEffect(() => {
-    apiFetch('/api/projects').then(r => r.json()).then(d => {
-      setProjects(Array.isArray(d) ? d : []);
-      if (d?.length) setSelectedProject(d[0]);
-    });
+    apiFetch('/api/projects').then(r => r && r.json ? r.json() : []).then(d => {
+      const safe = Array.isArray(d) ? d : [];
+      setProjects(safe);
+      if (safe.length) setSelectedProject(safe[0]);
+    }).catch(() => setProjects([]));
   }, []);
 
   const handleCaseStudyGenerated = (draft) => {

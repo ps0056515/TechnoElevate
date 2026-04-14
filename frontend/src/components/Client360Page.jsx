@@ -31,7 +31,7 @@ export default function Client360Page() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    apiFetch('/api/clients').then(r => r.json()).then(d => {
+    apiFetch('/api/clients').then(r => r && r.json ? r.json() : []).then(d => {
       const list = Array.isArray(d) ? d : [];
       setClients(list);
       if (list.length) setSelected(list[0]);
@@ -41,7 +41,7 @@ export default function Client360Page() {
   useEffect(() => {
     if (!selected) return;
     setLoading(true); setData(null);
-    apiFetch(`/api/client360/${encodeURIComponent(selected)}`).then(r => r.json()).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
+    apiFetch(`/api/client360/${encodeURIComponent(selected)}`).then(r => r && r.json ? r.json() : null).then(d => { setData(d && !d.error ? d : null); setLoading(false); }).catch(() => setLoading(false));
   }, [selected]);
 
   return (

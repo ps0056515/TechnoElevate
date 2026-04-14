@@ -28,7 +28,10 @@ export default function TalentLifecycle() {
   const [selectedStage, setSelectedStage] = useState(null);
 
   useEffect(() => {
-    apiFetch('/api/talent/lifecycle').then(r => r.json()).then(d => { setData(d); setLoading(false); });
+    apiFetch('/api/talent/lifecycle')
+      .then(r => r && r.json ? r.json() : null)
+      .then(d => { setData(d && !d.error ? d : null); setLoading(false); })
+      .catch(() => { setData(null); setLoading(false); });
   }, []);
 
   const getCount = (key) => {

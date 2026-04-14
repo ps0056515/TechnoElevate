@@ -14,9 +14,13 @@
     "seed": "node seed.js",
     "db:setup": "node seed.js",
     "db:migrate": "node migrate.js",
-    "build:frontend": "cd ../frontend && npm run build",
-    "deploy": "npm run build:frontend && npm run pm2:reload",
-    "test": "jest --runInBand --forceExit"
+    "build:frontend":  "cd ../frontend && npm run build",
+    "deploy":          "npm run build:frontend && npm run pm2:reload",
+    "template":        "node generate-template.js",
+    "onboard":         "node onboard-excel.js",
+    "onboard:reset":   "node onboard-excel.js --reset",
+    "onboard:dry-run": "node onboard-excel.js --dry-run",
+    "test":            "jest --runInBand --forceExit"
   },
   "jest": {
     "testEnvironment": "node",

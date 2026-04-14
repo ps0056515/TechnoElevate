@@ -34,7 +34,10 @@ export default function RequirementsPage() {
 
   const load = () => {
     setLoading(true);
-    apiFetch('/api/admin/requirements').then(r => r.json()).then(d => { setReqs(d); setLoading(false); });
+    apiFetch('/api/admin/requirements')
+      .then(r => r && r.json ? r.json() : [])
+      .then(d => { setReqs(Array.isArray(d) ? d : []); setLoading(false); })
+      .catch(() => { setReqs([]); setLoading(false); });
   };
   useEffect(() => {
     load();

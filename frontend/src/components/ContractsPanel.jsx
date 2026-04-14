@@ -40,7 +40,10 @@ export default function ContractsPanel({ compact }) {
   };
 
   useEffect(() => {
-    apiFetch('/api/contracts').then(r => r.json()).then(d => { setContracts(d); setLoading(false); });
+    apiFetch('/api/contracts')
+      .then(r => r && r.json ? r.json() : [])
+      .then(d => { setContracts(Array.isArray(d) ? d : []); setLoading(false); })
+      .catch(() => { setContracts([]); setLoading(false); });
   }, []);
 
   const filtered = filter === 'all' ? contracts : contracts.filter(c => c.status === filter);

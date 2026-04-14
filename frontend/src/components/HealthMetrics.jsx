@@ -16,7 +16,10 @@ export default function HealthMetrics() {
   const [showSend, setShowSend] = useState(false);
 
   useEffect(() => {
-    apiFetch('/api/health').then(r => r.json()).then(d => { setMetrics(d); setLoading(false); });
+    apiFetch('/api/health')
+      .then(r => r && r.json ? r.json() : [])
+      .then(d => { setMetrics(Array.isArray(d) ? d : []); setLoading(false); })
+      .catch(() => { setMetrics([]); setLoading(false); });
   }, []);
 
   const key = (k) => metrics.find(m => m.metric_key === k);

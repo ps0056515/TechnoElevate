@@ -17,7 +17,10 @@ export default function Pipeline() {
   const [loading, setLoading] = useState(true);
 
   const load = () => {
-    apiFetch('/api/pipeline').then(r => r.json()).then(d => { setReqs(d); setLoading(false); });
+    apiFetch('/api/pipeline')
+      .then(r => r && r.json ? r.json() : [])
+      .then(d => { setReqs(Array.isArray(d) ? d : []); setLoading(false); })
+      .catch(() => { setReqs([]); setLoading(false); });
   };
   useEffect(load, []);
 

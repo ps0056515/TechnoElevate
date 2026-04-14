@@ -117,7 +117,7 @@ export default function CaseStudiesTab({ showAdmin = false }) {
 
   const load = () => {
     const url = showAdmin ? '/api/admin/case-studies' : '/api/case-studies';
-    apiFetch(url).then(r => r.json()).then(d => { setCases(d); setLoading(false); });
+    apiFetch(url).then(r => r && r.json ? r.json() : []).then(d => { setCases(Array.isArray(d) ? d : []); setLoading(false); }).catch(() => { setCases([]); setLoading(false); });
   };
   useEffect(load, [showAdmin]);
 

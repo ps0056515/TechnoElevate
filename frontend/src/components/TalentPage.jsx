@@ -10,7 +10,7 @@ export default function TalentPage() {
   const [showSend, setShowSend] = useState(false);
 
   useEffect(() => {
-    apiFetch('/api/talent/lifecycle').then(r => r.json()).then(d => setTalent(d.talents || []));
+    apiFetch('/api/talent/lifecycle').then(r => r && r.json ? r.json() : {}).then(d => setTalent(Array.isArray(d?.talents) ? d.talents : [])).catch(() => setTalent([]));
   }, []);
 
   const reportData = {

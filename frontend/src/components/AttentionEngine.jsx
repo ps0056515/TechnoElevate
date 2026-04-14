@@ -13,7 +13,10 @@ export default function AttentionEngine() {
   const [collapsed, setCollapsed] = useState(false);
 
   const load = () => {
-    apiFetch('/api/attention').then(r => r.json()).then(d => { setIssues(d); setLoading(false); });
+    apiFetch('/api/attention')
+      .then(r => r && r.json ? r.json() : [])
+      .then(d => { setIssues(Array.isArray(d) ? d : []); setLoading(false); })
+      .catch(() => { setIssues([]); setLoading(false); });
   };
   useEffect(load, []);
 

@@ -9,11 +9,15 @@ export default function EngagementChecklist() {
   const [selected, setSelected] = useState(null);
 
   const load = () => {
-    apiFetch('/api/engagements').then(r => r.json()).then(d => {
-      setData(d);
-      if (!selected && d.engagements?.length) setSelected(d.engagements[0].id);
-      setLoading(false);
-    });
+    apiFetch('/api/engagements')
+      .then(r => r && r.json ? r.json() : {})
+      .then(d => {
+        const safe = (d && typeof d === 'object' && !Array.isArray(d)) ? d : {};
+        setData(safe);
+        if (!selected && safe.engagements?.length) setSelected(safe.engagements[0].id);
+        setLoading(false);
+      })
+      .catch(() => { setData({}); setLoading(false); });
   };
   useEffect(load, []);
 

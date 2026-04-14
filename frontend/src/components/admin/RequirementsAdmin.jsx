@@ -24,7 +24,7 @@ export default function RequirementsAdmin() {
 
   const load = () => {
     setLoading(true);
-    apiFetch('/api/admin/requirements').then(r => r.json()).then(d => { setRows(d); setLoading(false); });
+    apiFetch('/api/admin/requirements').then(r => r && r.json ? r.json() : []).then(d => { setRows(Array.isArray(d) ? d : []); setLoading(false); }).catch(() => { setRows([]); setLoading(false); });
   };
   useEffect(load, []);
 

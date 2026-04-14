@@ -37,8 +37,14 @@ export default function ManagedServices({ compact }) {
   const [addingTeam, setAddingTeam] = useState({});
 
   const load = () => {
-    apiFetch('/api/projects').then(r => r.json()).then(d => { setProjects(d); setLoading(false); });
-    apiFetch('/api/talent/available').then(r => r.json()).then(setAvailTalent).catch(() => {});
+    apiFetch('/api/projects')
+      .then(r => r && r.json ? r.json() : [])
+      .then(d => { setProjects(Array.isArray(d) ? d : []); setLoading(false); })
+      .catch(() => { setProjects([]); setLoading(false); });
+    apiFetch('/api/talent/available')
+      .then(r => r && r.json ? r.json() : [])
+      .then(d => setAvailTalent(Array.isArray(d) ? d : []))
+      .catch(() => {});
   };
   useEffect(load, []);
 
