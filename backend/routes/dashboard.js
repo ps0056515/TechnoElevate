@@ -3,8 +3,15 @@ const router = express.Router();
 const pool = require('../db');
 const path = require('path');
 const fs = require('fs');
+const { spawnSync } = require('child_process');
 const multer = require('multer');
 const nodemailer = require('nodemailer');
+const { requireAdmin } = require('../middleware/auth');
+const { loadBdDarSnapshot, defaultBdDarPath } = require('../loadBdDarSnapshot');
+const { computeAll } = require('../lib/bdOperationsKpi');
+const { buildVpView } = require('../lib/vpTargets');
+const { buildBoardSummary } = require('../lib/bdBoardSummary');
+const { getInvoiceRevenueCrore } = require('../lib/invoiceRevenueCrore');
 
 // ── File upload config ────────────────────────────────────────────────────────
 const UPLOADS_DIR = path.join(__dirname, '..', process.env.UPLOADS_DIR || 'uploads', 'projects');
@@ -1476,6 +1483,259 @@ router.post('/reports/send', async (req, res) => {
     });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Normalize snapshot (pg JSONB) so bd/bench are always arrays
+function snapshotFromDbPayload(pr) {
+  if (!pr || typeof pr !== 'object') {
+    return { bd: [], bench: [], bench_interview: [], market_interview: [] };
+  }
+  return {
+    ...pr,
+    bd: Array.isArray(pr.bd) ? pr.bd : [],
+    bench: Array.isArray(pr.bench) ? pr.bench : [],
+    bench_interview: Array.isArray(pr.bench_interview) ? pr.bench_interview : [],
+    market_interview: Array.isArray(pr.market_interview) ? pr.market_interview : [],
+  };
+}
+
+// ─── BD OPERATIONS DASHBOARD (Excel-parity KPIs from BD_DAR snapshot) ───────
+router.get('/bd-operations', async (req, res) => {
+  try {
+    let payload;
+    let meta = { source_filename: null, updated_at: null, data_source: null };
+    const snap = await pool.query('SELECT payload, source_filename, updated_at FROM bd_ops_snapshot WHERE id = 1');
+    const row = snap.rows[0];
+    const pr = row?.payload;
+    // `[]` is truthy in JS — must check length, or we never re-read the Excel when DB was saved empty
+    const dbHasBdRows = pr && Array.isArray(pr.bd) && pr.bd.length > 0;
+
+    if (dbHasBdRows) {
+      payload = snapshotFromDbPayload(pr);
+      meta = {
+        source_filename: row.source_filename,
+        updated_at: row.updated_at,
+        data_source: 'database',
+      };
+      if (payload._dar_meta?.resolved_sheets) {
+        meta.resolved_sheets = payload._dar_meta.resolved_sheets;
+        meta.dar_source_path = payload._dar_meta.source_path;
+      }
+    } else {
+      const p = defaultBdDarPath();
+      if (fs.existsSync(p)) {
+        payload = loadBdDarSnapshot(p);
+        meta = {
+          source_filename: path.basename(p),
+          updated_at: null,
+          live_file: true,
+          data_source: 'file',
+          resolved_sheets: payload._dar_meta?.resolved_sheets,
+          dar_source_path: payload._dar_meta?.source_path,
+        };
+        if (!dbHasBdRows && pr) {
+          meta.notice = 'Database snapshot had no BD rows — showing data from Excel on disk. Use "Save snapshot" to refresh the database.';
+        }
+      } else if (pr) {
+        payload = snapshotFromDbPayload(pr);
+        meta = {
+          source_filename: row.source_filename,
+          updated_at: row.updated_at,
+          data_source: 'database_empty',
+          notice: 'Snapshot in DB has no BD rows and no Excel file was found. Add backend/reference/BD_DAR.xlsx or run Save snapshot as Administrator.',
+        };
+      } else {
+        return res.json({
+          ok: false,
+          error:
+            'No data yet. Add backend/reference/BD_DAR.xlsx (or backend/BD_DAR.xlsx), then as Administrator: BD Operations → Save snapshot from file — or run: npm run bd:sync',
+        });
+      }
+    }
+    const m = computeAll(payload, new Date());
+    const inv = await getInvoiceRevenueCrore(pool, new Date());
+    const derived = {
+      onboarded_mtd: m.executive.onboarded_this_month,
+      revenue_mtd_cr: inv.revenue_mtd_cr,
+      revenue_ytd_cr: inv.revenue_ytd_cr,
+      invoice_count_mtd: inv.invoice_count_mtd,
+      invoice_count_ytd: inv.invoice_count_ytd,
+    };
+
+    let vpRow = null;
+    try {
+      const vpQ = await pool.query('SELECT * FROM bd_ops_vp_targets WHERE id = 1');
+      if (vpQ.rows[0]) {
+        vpRow = vpQ.rows[0];
+      } else {
+        await pool.query('INSERT INTO bd_ops_vp_targets (id) VALUES (1) ON CONFLICT (id) DO NOTHING');
+        vpRow = (await pool.query('SELECT * FROM bd_ops_vp_targets WHERE id = 1')).rows[0] || null;
+      }
+    } catch (e) {
+      console.error('bd_ops_vp_targets:', e.message);
+    }
+
+    let vpPayload;
+    try {
+      vpPayload = buildVpView(vpRow, derived);
+    } catch (e) {
+      console.error('buildVpView:', e.message);
+      vpPayload = buildVpView(null, derived);
+    }
+
+    const board = buildBoardSummary({
+      vp: vpPayload,
+      executive: m.executive,
+      bd_performance: m.views?.bd_performance,
+    });
+
+    res.json({
+      ok: true,
+      meta,
+      executive: m.executive,
+      funnel: m.funnel,
+      row_counts: m.row_counts,
+      views: m.views,
+      vp: vpPayload,
+      board,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * Update VP **targets** only (reality: engineers from BD DAR, revenue from invoices).
+ * Body: { monthly_engineer_target?, revenue_fy_target_cr?, period_label? } — use null/empty to clear
+ */
+router.put('/bd-operations/vp-targets', requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    let { rows } = await pool.query('SELECT * FROM bd_ops_vp_targets WHERE id = 1');
+    if (!rows[0]) {
+      await pool.query('INSERT INTO bd_ops_vp_targets (id) VALUES (1) ON CONFLICT (id) DO NOTHING');
+      rows = (await pool.query('SELECT * FROM bd_ops_vp_targets WHERE id = 1')).rows;
+    }
+    const r0 = rows[0];
+    if (!r0) return res.status(500).json({ error: 'Could not read bd_ops_vp_targets' });
+
+    let me = r0.monthly_engineer_target;
+    if (b.monthly_engineer_target !== undefined) {
+      if (b.monthly_engineer_target === null || b.monthly_engineer_target === '') me = null;
+      else {
+        const n = parseInt(b.monthly_engineer_target, 10);
+        me = Number.isFinite(n) ? n : null;
+      }
+    }
+    let fy = r0.revenue_fy_target_cr;
+    if (b.revenue_fy_target_cr !== undefined) {
+      if (b.revenue_fy_target_cr === null || b.revenue_fy_target_cr === '') fy = null;
+      else {
+        const n = parseFloat(b.revenue_fy_target_cr, 10);
+        fy = Number.isFinite(n) ? n : null;
+      }
+    }
+    const pl = b.period_label !== undefined
+      ? (b.period_label == null || b.period_label === '' ? null : String(b.period_label).trim())
+      : r0.period_label;
+
+    await pool.query(
+      'UPDATE bd_ops_vp_targets SET monthly_engineer_target = $1, revenue_fy_target_cr = $2, period_label = $3, updated_at = NOW() WHERE id = 1',
+      [me, fy, pl]
+    );
+    const row = (await pool.query('SELECT * FROM bd_ops_vp_targets WHERE id = 1')).rows[0];
+    const inv = await getInvoiceRevenueCrore(pool, new Date());
+    let payload = { bd: [] };
+    const snap = await pool.query('SELECT payload FROM bd_ops_snapshot WHERE id = 1');
+    if (snap.rows[0]?.payload?.bd) payload = snap.rows[0].payload;
+    const m = computeAll(payload, new Date());
+    const derived = {
+      onboarded_mtd: m.executive.onboarded_this_month,
+      ...inv,
+    };
+    res.json({ ok: true, vp: buildVpView(row, derived) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** Save raw BD_DAR to snapshot (Administrator). Optional body: { filePath: "..." } */
+router.post('/bd-operations/reload', requireAdmin, async (req, res) => {
+  try {
+    const p = (req.body && req.body.filePath) ? path.resolve(req.body.filePath) : defaultBdDarPath();
+    if (!fs.existsSync(p)) return res.status(400).json({ error: 'File not found: ' + p });
+    const payload = loadBdDarSnapshot(p);
+    await pool.query(
+      `INSERT INTO bd_ops_snapshot (id, payload, source_filename, updated_at)
+       VALUES (1, $1::jsonb, $2, NOW())
+       ON CONFLICT (id) DO UPDATE SET payload = $1::jsonb, source_filename = $2, updated_at = NOW()`,
+      [JSON.stringify(payload), path.basename(p)]
+    );
+    res.json({
+      ok: true,
+      message: 'Snapshot saved',
+      row_counts: { bd: payload.bd.length, bench: payload.bench.length, bench_interview: payload.bench_interview.length, market_interview: payload.market_interview.length },
+      resolved_sheets: payload._dar_meta?.resolved_sheets,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Reload snapshot from disk + generate TechnoElevate import + run onboard --reset (keeps Administrator users).
+ * Optional body: { filePath, skipOnboard: boolean }
+ */
+router.post('/bd-operations/full-import', requireAdmin, async (req, res) => {
+  try {
+    const p = (req.body && req.body.filePath) ? path.resolve(req.body.filePath) : defaultBdDarPath();
+    if (!fs.existsSync(p)) return res.status(400).json({ error: 'File not found: ' + p });
+
+    const payload = loadBdDarSnapshot(p);
+    await pool.query(
+      `INSERT INTO bd_ops_snapshot (id, payload, source_filename, updated_at)
+       VALUES (1, $1::jsonb, $2, NOW())
+       ON CONFLICT (id) DO UPDATE SET payload = $1::jsonb, source_filename = $2, updated_at = NOW()`,
+      [JSON.stringify(payload), path.basename(p)]
+    );
+
+    const skipOnboard = req.body && req.body.skipOnboard;
+    const baseCounts = {
+      row_counts: {
+        bd: payload.bd.length,
+        bench: payload.bench.length,
+        bench_interview: payload.bench_interview.length,
+        market_interview: payload.market_interview.length,
+      },
+      resolved_sheets: payload._dar_meta?.resolved_sheets,
+    };
+    if (skipOnboard) {
+      return res.json({ ok: true, message: 'Snapshot saved. Onboard skipped.', ...baseCounts });
+    }
+
+    const backRoot = path.join(__dirname, '..');
+    const r = spawnSync(
+      process.execPath,
+      [path.join(backRoot, 'import-bd-dar.js'), '--in=' + p, '--out=' + path.join(backRoot, 'TechnoElevate_From_BD_DAR.xlsx')],
+      { cwd: backRoot, stdio: 'inherit', env: process.env }
+    );
+    if (r.status !== 0) return res.status(500).json({ error: 'import-bd-dar.js failed' });
+
+    const o = spawnSync(
+      process.execPath,
+      [path.join(backRoot, 'onboard-excel.js'), '--reset', '--file=' + path.join(backRoot, 'TechnoElevate_From_BD_DAR.xlsx')],
+      { cwd: backRoot, stdio: 'inherit', env: process.env }
+    );
+    if (o.status !== 0) return res.status(500).json({ error: 'onboard-excel.js failed' });
+
+    res.json({
+      ok: true,
+      message: 'Full import complete. Logins: non-admin data cleared; Administrator users preserved.',
+      ...baseCounts,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

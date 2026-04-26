@@ -8,7 +8,8 @@
  * Usage:
  *   node onboard-excel.js                         # import from default file
  *   node onboard-excel.js --file=../mydata.xlsx   # custom file path
- *   node onboard-excel.js --reset                 # wipe DB first, then import
+ *   node onboard-excel.js --reset                 # wipe org data, keep Administrator users, then import
+ *   node onboard-excel.js --reset --full-reset    # wipe everything including all users, then import
  *   node onboard-excel.js --dry-run               # validate without writing
  *
  * Generate blank template:
@@ -23,13 +24,60 @@ const fs     = require('fs');
 const pool   = require('./db');
 
 // ─── CLI args ──────────────────────────────────────────────────────────────
-const argv   = process.argv.slice(2);
-const RESET  = argv.includes('--reset');
-const DRY    = argv.includes('--dry-run');
+const argv       = process.argv.slice(2);
+const RESET      = argv.includes('--reset');
+const FULL_RESET = argv.includes('--full-reset');
+const DO_RESET   = RESET || FULL_RESET;
+const DRY        = argv.includes('--dry-run');
 const fileArg = argv.find(a => a.startsWith('--file='));
-const EXCEL_PATH = fileArg
-  ? path.resolve(fileArg.split('=')[1])
+let EXCEL_PATH = fileArg
+  ? path.resolve(fileArg.slice('--file='.length).replace(/^["']|["']$/g, ''))
   : path.join(__dirname, 'TechnoElevate_Setup.xlsx');
+
+/** If path missing, try .xlsx / .xls (handles paths without extension). */
+function resolveExcelPath(p) {
+  if (fs.existsSync(p)) return p;
+  const ext = path.extname(p).toLowerCase();
+  if (ext === '.xlsx' || ext === '.xls') return p;
+  for (const e of ['.xlsx', '.xls', '.XLSX', '.XLS']) {
+    const alt = p + e;
+    if (fs.existsSync(alt)) return alt;
+  }
+  const dir = path.dirname(p);
+  const base = path.basename(p);
+  for (const e of ['.xlsx', '.xls']) {
+    const alt = path.join(dir, base + e);
+    if (fs.existsSync(alt)) return alt;
+  }
+  return p;
+}
+EXCEL_PATH = resolveExcelPath(EXCEL_PATH);
+
+/** Logical name → alternate tab titles (e.g. client-specific workbooks). */
+const SHEET_ALIASES = {
+  CONFIG:       ['CONFIG', 'Admn Config', 'Admin Config'],
+  USERS:        ['USERS', 'Users'],
+  TALENT:       ['TALENT', 'Talent'],
+  LEADS:        ['LEADS', 'LeadsPipeline', 'Leads Pipeline'],
+  CONTRACTS:    ['CONTRACTS', 'Active Contracts'],
+  REQUIREMENTS: ['REQUIREMENTS', 'Open Reqs', 'Open reqs'],
+  PROJECTS:     ['PROJECTS', 'MS Projects'],
+  INVOICES:     ['INVOICES', 'invoices', 'Invoices'],
+};
+
+/** Resolve template sheet name to actual workbook tab (exact or case-insensitive). */
+function resolveSheetName(wb, logicalName) {
+  const tryNames = [logicalName, ...(SHEET_ALIASES[logicalName] || [])];
+  for (const name of tryNames) {
+    if (wb.Sheets[name]) return name;
+  }
+  const byLower = new Map(wb.SheetNames.map(n => [n.toLowerCase(), n]));
+  for (const name of tryNames) {
+    const hit = byLower.get(String(name).toLowerCase());
+    if (hit) return hit;
+  }
+  return null;
+}
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -38,12 +86,13 @@ const EXCEL_PATH = fileArg
  * Skips leading comment rows (cells starting with "#") and blank rows,
  * then treats the first non-comment row as the header row.
  */
-function toObjects(wb, sheetName) {
-  const sheet = wb.Sheets[sheetName];
-  if (!sheet) {
-    console.warn(`  ⚠  Sheet "${sheetName}" not found — skipped`);
+function toObjects(wb, logicalSheetName) {
+  const sheetName = resolveSheetName(wb, logicalSheetName);
+  if (!sheetName) {
+    console.warn(`  ⚠  Sheet "${logicalSheetName}" not found — skipped`);
     return [];
   }
+  const sheet = wb.Sheets[sheetName];
 
   // Get raw rows as arrays (no header interpretation)
   const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
@@ -76,6 +125,9 @@ function toObjects(wb, sheetName) {
  * Excel stores dates as JS Date objects (with cellDates:true) or
  * as serial numbers or as formatted strings.  Normalise all to YYYY-MM-DD.
  */
+/** Placeholders in client spreadsheets that are not real dates */
+const NON_DATE_STRINGS = new Set(['NA', 'N/A', 'N.A.', '-', '—', 'TBD', 'NONE', 'NULL', '#N/A']);
+
 function parseDate(val) {
   if (!val && val !== 0) return null;
   if (val instanceof Date) return isNaN(val) ? null : val.toISOString().slice(0, 10);
@@ -84,7 +136,17 @@ function parseDate(val) {
     const ms = Math.round((val - 25569) * 86400 * 1000);
     return new Date(ms).toISOString().slice(0, 10);
   }
-  if (typeof val === 'string' && val.trim()) return val.trim();
+  if (typeof val === 'string') {
+    const s = val.trim();
+    if (!s) return null;
+    if (NON_DATE_STRINGS.has(s.toUpperCase().replace(/\s+/g, ''))) return null;
+    if (NON_DATE_STRINGS.has(s.replace(/\./g, '').toUpperCase())) return null;
+    const iso = /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null;
+    if (iso && !isNaN(Date.parse(iso))) return iso;
+    const t = Date.parse(s);
+    if (!isNaN(t)) return new Date(t).toISOString().slice(0, 10);
+    return null;
+  }
   return null;
 }
 
@@ -168,17 +230,33 @@ async function main() {
     await pool.query(sql);
     console.log('done');
 
-    if (RESET) {
-      process.stdout.write('⚠️   Resetting all data... ');
-      await pool.query(`
-        TRUNCATE invoices, project_milestones, project_talent,
-                 requirement_candidates, project_documents, case_studies,
-                 user_settings, users, attention_issues, bench_idle_weekly,
-                 requirements, projects, contracts,
-                 engagement_checklist_items, engagements,
-                 talent, health_metrics, leads
-        RESTART IDENTITY CASCADE
-      `);
+    if (DO_RESET) {
+      if (FULL_RESET) {
+        process.stdout.write('⚠️   Full reset (all users and org data)... ');
+        await pool.query(`
+          TRUNCATE invoices, project_milestones, project_talent,
+                   requirement_candidates, project_documents, case_studies,
+                   user_settings, users, attention_issues, bench_idle_weekly,
+                   requirements, projects, contracts,
+                   engagement_checklist_items, engagements,
+                   talent, health_metrics, leads
+          RESTART IDENTITY CASCADE
+        `);
+      } else {
+        process.stdout.write('⚠️   Resetting org data (keeping Administrator users)... ');
+        await pool.query(`
+          TRUNCATE invoices, project_milestones, project_talent,
+                   requirement_candidates, project_documents, case_studies,
+                   attention_issues, bench_idle_weekly,
+                   requirements, projects, contracts,
+                   engagement_checklist_items, engagements,
+                   talent, health_metrics, leads
+          RESTART IDENTITY CASCADE
+        `);
+        await pool.query(`
+          DELETE FROM users WHERE role IS DISTINCT FROM 'Administrator'
+        `);
+      }
       console.log('done');
     }
   }

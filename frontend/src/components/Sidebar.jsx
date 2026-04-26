@@ -1,7 +1,7 @@
 import React from 'react';
 
 const navItems = [
-  { label: 'Dashboard', icon: '⊞' },
+  { label: 'BD Operations', icon: '⊞' },
   { label: 'Leads', icon: '◎', dot: true },
   { label: 'Requirements', icon: '☰' },
   { label: 'Projects', icon: '▣' },

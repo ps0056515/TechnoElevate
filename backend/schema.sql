@@ -1,5 +1,25 @@
 -- TechnoElevate Operations Platform — PostgreSQL Schema
 
+-- Raw BD_DAR JSON snapshot for operations KPIs (matches Excel dashboard formulas)
+CREATE TABLE IF NOT EXISTS bd_ops_snapshot (
+  id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  payload JSONB NOT NULL DEFAULT '{}',
+  source_filename TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- VP "Targets" tab: optional targets; reality comes from snapshot + invoices (no app defaults)
+CREATE TABLE IF NOT EXISTS bd_ops_vp_targets (
+  id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  monthly_engineer_target INTEGER,
+  net_engineer_actual INTEGER,
+  revenue_fy_target_cr NUMERIC(12,2),
+  revenue_mtd_cr NUMERIC(12,2),
+  revenue_ytd_cr NUMERIC(12,2),
+  period_label TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   name VARCHAR(100) NOT NULL,

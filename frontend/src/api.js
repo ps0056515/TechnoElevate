@@ -47,3 +47,26 @@ export async function apiFetch(path, options = {}) {
 
   return res;
 }
+
+/**
+ * Fetches a JSON body and throws a clear error if the server returned HTML (e.g. Vite
+ * index page when the /api proxy target is wrong or the API is down).
+ */
+export async function apiJson(path, options = {}) {
+  const res = await apiFetch(path, options);
+  if (res == null) return null;
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  if (!ct.includes('application/json')) {
+    const text = await res.text();
+    if (text.trim().startsWith('<!')) {
+      const hint = import.meta.env.DEV
+        ? ' In Vite dev, set frontend/.env.local: VITE_API_URL=http://localhost:YOUR_API_PORT, or VITE_DEV_PROXY=the same (see .env.example).'
+        : '';
+      throw new Error(
+        `API returned HTML instead of JSON (is the backend running on the right port, and the Vite proxy matching?).${hint}`
+      );
+    }
+    throw new Error(text.slice(0, 200) || res.statusText || 'Non-JSON response');
+  }
+  return res.json();
+}

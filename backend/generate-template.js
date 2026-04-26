@@ -238,5 +238,5 @@ for (const s of sheets) {
 console.log('\nNext steps:');
 console.log('  1. Open TechnoElevate_Setup.xlsx in Excel / Google Sheets');
 console.log('  2. Fill in your organisation\'s data (replace example rows)');
-console.log('  3. Run: node onboard-excel.js --reset');
+console.log('  3. Run: node onboard-excel.js --reset   # keeps Administrator users; add --full-reset to wipe all users');
 console.log('  4. Open: http://localhost:7000\n');

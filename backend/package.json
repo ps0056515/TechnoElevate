@@ -18,8 +18,12 @@
     "deploy":          "npm run build:frontend && npm run pm2:reload",
     "template":        "node generate-template.js",
     "onboard":         "node onboard-excel.js",
-    "onboard:reset":   "node onboard-excel.js --reset",
+    "onboard:reset":      "node onboard-excel.js --reset",
+    "onboard:full-reset": "node onboard-excel.js --reset --full-reset",
     "onboard:dry-run": "node onboard-excel.js --dry-run",
+    "import:bd-dar":   "node import-bd-dar.js",
+    "bd:sync":         "node sync-bd-dar-full.js",
+    "bd:inspect":      "node inspect-bd-dar.js",
     "test":            "jest --runInBand --forceExit"
   },
   "jest": {

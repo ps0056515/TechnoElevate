@@ -3,7 +3,6 @@ import { getToken, clearToken, apiFetch } from './api.js';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import ThemePicker from './components/ThemePicker.jsx';
 import Sidebar from './components/Sidebar.jsx';
-import DashboardOverview from './components/DashboardOverview.jsx';
 import TalentPage from './components/TalentPage.jsx';
 import ContractsPage from './components/ContractsPage.jsx';
 import ProjectsPage from './components/ProjectsPage.jsx';
@@ -13,25 +12,23 @@ import RequirementsPage from './components/RequirementsPage.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import LoginPage from './components/LoginPage.jsx';
 import Client360Page from './components/Client360Page.jsx';
+import BdOperationsPage from './components/BdOperationsPage.jsx';
 
-const tabs = ['Overview', 'Pro Services', 'Managed Services', 'Talent', 'Contracts'];
-
-  const PAGE_TITLES = {
-    Dashboard: 'Daily Standup',
-    Leads: 'Leads',
-    Requirements: 'Requirements',
-    Talent: 'Talent',
-    Contracts: 'Contracts',
-    Projects: 'Projects',
-    'Client 360': 'Client 360°',
-    Admin: 'Data Management',
-    Settings: 'Settings',
-  };
+const PAGE_TITLES = {
+  Leads: 'Leads',
+  Requirements: 'Requirements',
+  Talent: 'Talent',
+  Contracts: 'Contracts',
+  Projects: 'Projects',
+  'Client 360': 'Client 360°',
+  'BD Operations': 'BD Operations',
+  Admin: 'Data Management',
+  Settings: 'Settings',
+};
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [activeNav, setActiveNav] = useState('Dashboard');
-  const [activeTab, setActiveTab] = useState('Overview');
+  const [activeNav, setActiveNav] = useState('BD Operations');
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
@@ -45,7 +42,7 @@ export default function App() {
   }, []);
 
   const handleLogin = (u) => setUser(u);
-  const handleLogout = () => { clearToken(); setUser(null); setActiveNav('Dashboard'); };
+  const handleLogout = () => { clearToken(); setUser(null); setActiveNav('BD Operations'); };
   const handleUpdateUser = (updated) => setUser(prev => ({ ...prev, ...updated }));
 
   if (checkingSession) return (
@@ -60,28 +57,13 @@ export default function App() {
     if (activeNav === 'Settings') return <SettingsPage user={user} onLogout={handleLogout} onUpdateUser={handleUpdateUser} />;
     if (activeNav === 'Admin') return <AdminPage />;
     if (activeNav === 'Client 360') return <Client360Page />;
+    if (activeNav === 'BD Operations') return <BdOperationsPage user={user} />;
     if (activeNav === 'Leads') return <LeadsPage />;
     if (activeNav === 'Requirements') return <RequirementsPage />;
     if (activeNav === 'Talent') return <TalentPage />;
     if (activeNav === 'Contracts') return <ContractsPage />;
     if (activeNav === 'Projects') return <ProjectsPage />;
-    return (
-      <>
-        <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--border)', paddingBottom: 0 }}>
-          {tabs.map(t => (
-            <button key={t} onClick={() => setActiveTab(t)} style={{
-              background: activeTab === t ? 'var(--accent-blue)' : 'transparent',
-              color: activeTab === t ? '#fff' : 'var(--text-secondary)',
-              border: 'none', borderRadius: '6px 6px 0 0',
-              padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              transition: 'all 0.15s', marginBottom: -1,
-              borderBottom: activeTab === t ? '2px solid var(--accent-blue)' : '2px solid transparent',
-            }}>{t}</button>
-          ))}
-        </div>
-        <DashboardOverview activeTab={activeTab} onNavigate={setActiveNav} />
-      </>
-    );
+    return <BdOperationsPage user={user} />;
   };
 
   const initials = user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -98,7 +80,7 @@ export default function App() {
           background: 'var(--bg-base)', position: 'sticky', top: 0, zIndex: 10,
         }}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{PAGE_TITLES[activeNav] || 'Daily Standup'}</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>{PAGE_TITLES[activeNav] || 'BD Operations'}</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Operations Platform</div>
           </div>
 

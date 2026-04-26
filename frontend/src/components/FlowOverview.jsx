@@ -153,7 +153,7 @@ export default function FlowOverview({ onNavigate }) {
     {
       icon: '🚀', label: 'Live Engagements', count: engActive,
       color: 'var(--green)', bg: 'var(--green-dim)',
-      onClick: onNavigate ? () => onNavigate('Dashboard') : null,
+      onClick: onNavigate ? () => onNavigate('BD Operations') : null,
       highlight: engActive > 0,
       sublabel: 'on-site / remote',
     },

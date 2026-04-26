@@ -7,6 +7,42 @@ const pool = new Pool({
 
 async function run() {
   const stmts = [
+    `CREATE TABLE IF NOT EXISTS bd_ops_snapshot (
+      id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      payload JSONB NOT NULL DEFAULT '{}',
+      source_filename TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS bd_ops_vp_targets (
+      id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      monthly_engineer_target INTEGER,
+      net_engineer_actual INTEGER,
+      revenue_fy_target_cr NUMERIC(12,2),
+      revenue_mtd_cr NUMERIC(12,2),
+      revenue_ytd_cr NUMERIC(12,2),
+      period_label TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`,
+    `DO $vp$
+     BEGIN
+       IF EXISTS (SELECT 1 FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'bd_ops_vp_targets' AND column_name = 'monthly_engineer_target' AND is_nullable = 'NO') THEN
+         ALTER TABLE bd_ops_vp_targets ALTER COLUMN monthly_engineer_target DROP NOT NULL;
+       END IF;
+       IF EXISTS (SELECT 1 FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'bd_ops_vp_targets' AND column_name = 'net_engineer_actual' AND is_nullable = 'NO') THEN
+         ALTER TABLE bd_ops_vp_targets ALTER COLUMN net_engineer_actual DROP NOT NULL;
+       END IF;
+       IF EXISTS (SELECT 1 FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'bd_ops_vp_targets' AND column_name = 'revenue_fy_target_cr' AND is_nullable = 'NO') THEN
+         ALTER TABLE bd_ops_vp_targets ALTER COLUMN revenue_fy_target_cr DROP NOT NULL;
+       END IF;
+       IF EXISTS (SELECT 1 FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'bd_ops_vp_targets' AND column_name = 'revenue_mtd_cr' AND is_nullable = 'NO') THEN
+         ALTER TABLE bd_ops_vp_targets ALTER COLUMN revenue_mtd_cr DROP NOT NULL;
+       END IF;
+     END$vp$`,
+    `INSERT INTO bd_ops_vp_targets (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
     "ALTER TABLE engagements ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'",
     "ALTER TABLE engagements ADD COLUMN IF NOT EXISTS end_date DATE",
     "ALTER TABLE engagements ADD COLUMN IF NOT EXISTS end_reason TEXT",
